@@ -15,6 +15,8 @@ let doc = structuredClone(demo);
 let currentPath = null;
 let byId = new Map();
 let pathIndex = 0;
+let offPath = false; // beim Präsentieren frei zu einem Objekt geflogen
+let presenting = false;
 let selected = null;
 let nextId = 1;
 
@@ -130,8 +132,15 @@ function frameState(id) {
 
 function goTo(i) {
   pathIndex = Math.max(0, Math.min(doc.path.length - 1, i));
+  offPath = false;
   markActive();
+  updateProgress();
   camera.flyTo(frameState(doc.path[pathIndex]));
+}
+
+// Weiter/zurück. Wer beim Präsentieren frei unterwegs war, kommt mit „zurück“ erst zum aktuellen Schritt.
+function step(dir) {
+  goTo(offPath && dir < 0 ? pathIndex : pathIndex + dir);
 }
 
 // Neuer Rahmen kommt ans Ende des Pfads, aber vor einen abschließenden Überblick.
@@ -250,6 +259,14 @@ let gesture = null;
 
 viewport.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1) return;
+  if (presenting) {
+    // Beim Präsentieren wird nichts bearbeitet: ziehen verschiebt, ein Klick fliegt zum Objekt.
+    camera.stop();
+    const target = e.target.closest?.(".obj:not(.hidden-frame)");
+    gesture = { kind: "pan", x: e.clientX, y: e.clientY, cx: camera.cx, cy: camera.cy, target };
+    viewport.setPointerCapture(e.pointerId);
+    return;
+  }
   if (e.target.isContentEditable) return;
   if (isEditing()) document.activeElement.blur();
   camera.stop();
@@ -299,9 +316,12 @@ viewport.addEventListener("pointermove", (e) => {
   }
 });
 
-const endGesture = () => {
+const endGesture = (e) => {
+  const g = gesture;
   gesture = null;
   viewport.classList.remove("dragging");
+  const isClick = g?.kind === "pan" && e?.type === "pointerup" && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 4;
+  if (presenting && isClick && g.target) flyToObject(byId.get(g.target.dataset.id));
 };
 viewport.addEventListener("pointerup", endGesture);
 viewport.addEventListener("pointercancel", endGesture);
@@ -332,6 +352,7 @@ function zoomAt(factor, sx, sy) {
 
 // Doppelklick: Text bearbeiten, sonst zum kleinsten Rahmen unter dem Zeiger fliegen.
 viewport.addEventListener("dblclick", (e) => {
+  if (presenting) return;
   // Wegen der Zeigererfassung ist e.target hier der Viewport, also selbst nachsehen.
   const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".obj.text");
   if (el) {
@@ -398,6 +419,67 @@ async function openFile() {
   }
 }
 
+// ---------- Präsentieren ----------
+
+const appWindow = tauri?.window?.getCurrentWindow();
+const progressBar = document.getElementById("progress-bar");
+const stepLabel = document.getElementById("step-label");
+let controlsTimer = null;
+
+function flyToObject(o) {
+  if (!o) return;
+  const i = o.type === "frame" ? doc.path.indexOf(o.id) : -1;
+  if (i >= 0) return goTo(i);
+  offPath = true;
+  camera.flyTo(fitRect(o, viewport.clientWidth, viewport.clientHeight, o.type === "frame" ? 0.08 : 0.15));
+}
+
+function updateProgress() {
+  const last = Math.max(1, doc.path.length - 1);
+  progressBar.style.width = `${(pathIndex / last) * 100}%`;
+  stepLabel.textContent = `${pathIndex + 1} / ${doc.path.length}`;
+}
+
+async function setFullscreen(on) {
+  try {
+    await appWindow?.setFullscreen(on);
+  } catch {
+    // Ohne Vollbild-Recht bleibt das Fenster einfach, wie es ist.
+  }
+}
+
+async function startPresentation(fromCurrent) {
+  if (presenting) return;
+  if (isEditing()) document.activeElement.blur();
+  select(null);
+  presenting = true;
+  document.body.classList.add("presenting");
+  await setFullscreen(true);
+  // Erst wenn das Fenster seine neue Größe hat, passt der Ausschnitt.
+  requestAnimationFrame(() => {
+    goTo(fromCurrent ? pathIndex : 0);
+    showControls();
+  });
+}
+
+async function stopPresentation() {
+  if (!presenting) return;
+  presenting = false;
+  document.body.classList.remove("presenting", "show-controls");
+  await setFullscreen(false);
+}
+
+// Die Steuerleiste erscheint bei Mausbewegung und verschwindet nach zwei Sekunden Ruhe.
+function showControls() {
+  document.body.classList.add("show-controls");
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(() => document.body.classList.remove("show-controls"), 2000);
+}
+
+document.addEventListener("mousemove", () => {
+  if (presenting) showControls();
+});
+
 // ---------- Tasten und Knöpfe ----------
 
 document.addEventListener("keydown", (e) => {
@@ -416,20 +498,27 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") document.activeElement.blur();
     return;
   }
-  if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) goTo(pathIndex + 1);
-  else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) goTo(pathIndex - 1);
+  if (e.key === "F5") startPresentation(e.shiftKey);
+  else if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) step(1);
+  else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) step(-1);
   else if (e.key === "Home") goTo(0);
+  else if (e.key === "Escape") presenting ? stopPresentation() : select(null);
+  else if (presenting) return;
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
-  else if (e.key === "Escape") select(null);
   else return;
   e.preventDefault();
 });
 
 const on = (id, fn) => document.getElementById(id).addEventListener("click", fn);
 const center = () => [viewport.clientWidth / 2, viewport.clientHeight / 2];
-on("btn-next", () => goTo(pathIndex + 1));
-on("btn-prev", () => goTo(pathIndex - 1));
+on("btn-next", () => step(1));
+on("btn-prev", () => step(-1));
 on("btn-home", () => goTo(0));
+on("btn-present", () => startPresentation(false));
+on("pc-next", () => step(1));
+on("pc-prev", () => step(-1));
+on("pc-home", () => goTo(0));
+on("pc-exit", stopPresentation);
 on("btn-zoom-in", () => zoomAt(ZOOM_STEP, ...center()));
 on("btn-zoom-out", () => zoomAt(1 / ZOOM_STEP, ...center()));
 on("btn-add-text", () => addObject("text"));
@@ -442,7 +531,11 @@ on("btn-delete", deleteSelected);
 on("btn-open", openFile);
 on("btn-save", save);
 
-new ResizeObserver(render).observe(viewport);
+new ResizeObserver(() => {
+  // Beim Präsentieren bleibt der aktuelle Rahmen eingepasst, auch wenn sich die Fenstergröße ändert.
+  if (presenting && !offPath && !camera.anim) camera.set(frameState(doc.path[pathIndex]));
+  else render();
+}).observe(viewport);
 
 // ---------- Start ----------
 

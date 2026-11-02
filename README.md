@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Rückgängig, Bilder, Farben und ein Vollbild-Präsentationsmodus.
+> Frühes Entwicklungsstadium. Es fehlen u. a. Rückgängig, Bilder und Farben.
 
 ## Bedienung
 
@@ -22,6 +22,9 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 | Text bearbeiten | Doppelklick auf den Text, Esc beendet |
 | Löschen | Entf |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
+| Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
+| Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
+| Präsentation beenden | Esc |
 
 ## Dateiformat `.weitblick`
 

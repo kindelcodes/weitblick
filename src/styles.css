@@ -108,6 +108,110 @@ body {
   pointer-events: none;
 }
 
+.tools button.primary {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tools button.primary:hover {
+  background: #2560d4;
+}
+
+/* ---------- Präsentieren ---------- */
+
+.progress,
+.present-controls {
+  display: none;
+}
+
+body.presenting {
+  grid-template-columns: 0 1fr;
+  grid-template-rows: 0 1fr;
+}
+
+body.presenting .topbar,
+body.presenting .pathbar,
+body.presenting .navbar {
+  display: none;
+}
+
+body.presenting .viewport {
+  background-image: none;
+  cursor: default;
+}
+
+body.presenting .obj.frame {
+  border-color: transparent;
+  background: none;
+}
+
+body.presenting .obj:not(.hidden-frame) {
+  cursor: zoom-in;
+}
+
+body.presenting .progress {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+body.presenting .present-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(20, 21, 26, 0.75);
+  color: #fff;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+body.presenting.show-controls .present-controls {
+  opacity: 1;
+}
+
+body.presenting:not(.show-controls) .viewport {
+  cursor: none;
+}
+
+.present-controls button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.present-controls button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+#step-label {
+  min-width: 52px;
+  text-align: center;
+}
+
 #path-list .remove {
   margin-left: auto;
   border: none;
@@ -179,6 +283,8 @@ body {
 }
 
 .viewport {
+  grid-column: 2;
+  grid-row: 2; /* fest platziert, damit sie beim Präsentieren nicht in die leere erste Spalte rutscht */
   position: relative;
   overflow: hidden;
   cursor: grab;

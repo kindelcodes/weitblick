@@ -23,6 +23,8 @@
         <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
         <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
         <button id="btn-delete" data-needs="any" title="Löschen (Entf)">Löschen</button>
+        <span class="sep"></span>
+        <button id="btn-present" class="primary" title="Präsentieren (F5, ab aktuellem Schritt: Umschalt+F5)">▶ Präsentieren</button>
       </div>
     </header>
 
@@ -33,6 +35,14 @@
 
     <main id="viewport" class="viewport">
       <div id="world" class="world"></div>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <div class="present-controls">
+        <button id="pc-prev" title="Zurück (←)">‹</button>
+        <span id="step-label"></span>
+        <button id="pc-next" title="Weiter (→)">›</button>
+        <button id="pc-home" title="Überblick (Pos1)">⌂</button>
+        <button id="pc-exit" title="Beenden (Esc)">✕</button>
+      </div>
     </main>
 
     <nav class="navbar">
