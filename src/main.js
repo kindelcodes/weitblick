@@ -977,7 +977,10 @@ async function save() {
 async function openFile() {
   if (!(await confirmDiscard())) return;
   const path = await tauri.dialog.open({ filters: FILTERS, multiple: false });
-  if (!path) return;
+  if (path) await openPath(path);
+}
+
+async function openPath(path) {
   try {
     const result = await tauri.core.invoke("open_presentation", { path });
     const loaded = JSON.parse(result.json);
@@ -1171,3 +1174,9 @@ buildPathList();
 updateToolbar();
 markSaved();
 camera.set(frameState(doc.path[0]));
+
+// Per Doppelklick auf eine .weitblick-Datei gestartet? Dann gleich diese öffnen.
+tauri?.core
+  .invoke("startup_file")
+  .then((path) => path && openPath(path))
+  .catch(() => {});

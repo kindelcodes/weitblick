@@ -86,12 +86,25 @@ fn import_media(path: String) -> Result<MediaFile, String> {
     Ok(MediaFile { name, data: STANDARD.encode(bytes) })
 }
 
+// Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
+#[tauri::command]
+fn startup_file() -> Option<String> {
+    std::env::args()
+        .skip(1)
+        .find(|a| a.to_lowercase().ends_with(".weitblick") && std::path::Path::new(a).is_file())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![save_presentation, open_presentation, import_media])
+        .invoke_handler(tauri::generate_handler![
+            save_presentation,
+            open_presentation,
+            import_media,
+            startup_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

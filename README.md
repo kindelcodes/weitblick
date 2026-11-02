@@ -8,6 +8,17 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 
 > Frühes Entwicklungsstadium. Es fehlen u. a. Sprechernotizen und PDF-Export.
 
+## Installieren
+
+Fertige Pakete gibt es unter [Releases](https://github.com/kindelcodes/weitblick/releases):
+
+- **Windows:** `Weitblick_…_x64-setup.exe` (ohne Administratorrechte) oder `Weitblick_…_x64_de-DE.msi`
+- **Linux:** `Weitblick_…_amd64.AppImage` (ausführbar machen und starten), `.deb` für Debian/Ubuntu, `.rpm` für Fedora/openSUSE
+
+Nach der Installation öffnen sich `.weitblick`-Dateien per Doppelklick in Weitblick.
+Die Pakete baut GitHub Actions ([.github/workflows/build.yml](.github/workflows/build.yml)) bei jedem Push;
+ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
+
 ## Bedienung
 
 | Aktion | Eingabe |

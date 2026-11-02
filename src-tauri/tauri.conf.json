@@ -24,6 +24,26 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Nils Kindel",
+    "copyright": "© 2026 Nils Kindel",
+    "license": "MIT",
+    "homepage": "https://github.com/kindelcodes/weitblick",
+    "category": "Productivity",
+    "shortDescription": "Präsentationen auf einer zoombaren Leinwand",
+    "longDescription": "Weitblick legt alle Inhalte auf eine große Leinwand. Rahmen markieren Ausschnitte, ein Pfad legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen. Läuft vollständig offline.",
+    "windows": {
+      "wix": { "language": "de-DE" },
+      "nsis": { "languages": ["German"], "installMode": "currentUser" }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["weitblick"],
+        "name": "Weitblick-Präsentation",
+        "description": "Weitblick-Präsentation",
+        "role": "Editor",
+        "mimeType": "application/x-weitblick"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
