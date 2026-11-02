@@ -296,6 +296,35 @@ body.presenting:not(.show-controls) .viewport {
   text-align: center;
 }
 
+#path-list li.anim {
+  padding-left: 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#path-list li.anim .num {
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
+#path-list li.anim .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obj {
+  transition: opacity 0.5s ease;
+}
+
+.obj.anim-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 #path-list li.dragging {
   opacity: 0.5;
 }

@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Animationsschritte, Sprechernotizen und PDF-Export.
+> Frühes Entwicklungsstadium. Es fehlen u. a. Sprechernotizen und PDF-Export.
 
 ## Bedienung
 
@@ -29,6 +29,7 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 | Pfadschritt umbenennen | Doppelklick auf den Eintrag in der Pfadliste, Enter übernimmt |
 | Pfad umsortieren | Eintrag in der Pfadliste nach oben/unten ziehen |
 | Objekt als Pfadschritt (auch mehrmals) | Objekt auswählen, „+ Pfad“ |
+| Animationsschritt | Objekt(e) auswählen, „✦ Einblenden“ oder „✧ Ausblenden“ in der Formatleiste; der Schritt landet direkt hinter dem aktuellen Pfadschritt, die Kamera bleibt dabei stehen |
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
@@ -41,6 +42,8 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 Eine ZIP-Datei mit:
 
 - `presentation.json`: Leinwand, Objekte, Rahmen, Pfad und Thema. Hat ein Feld `version` für spätere Formatänderungen.
+  Ab Version 2 kann ein Pfadeintrag statt einer Objekt-id auch ein Animationsschritt sein:
+  `{ "type": "fade-in" | "fade-out", "targets": ["id", …] }`.
 - `media/`: eingefügte Bilder in Originalform (unkomprimiert abgelegt, weil sie schon komprimiert sind)
 
 ## Bauen

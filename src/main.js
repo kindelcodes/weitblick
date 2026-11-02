@@ -248,9 +248,13 @@ function buildPathList() {
     const li = document.createElement("li");
     li.innerHTML = `<span class="num"></span><span class="label"></span><button class="remove" title="Aus dem Pfad entfernen">×</button>`;
     li.querySelector(".num").textContent = id === doc.path[0] ? "⌂" : i;
-    li.querySelector(".label").textContent = stepLabel(byId.get(id)) ?? id;
+    li.querySelector(".label").textContent = isAnim(id) ? animLabel(id) : (stepLabel(byId.get(id)) ?? id);
+    li.classList.toggle("anim", isAnim(id));
     li.addEventListener("click", (e) => {
-      if (!pathDrag?.moved && !e.target.isContentEditable) goTo(i);
+      if (pathDrag?.moved || e.target.isContentEditable) return;
+      goTo(i);
+      // Im Editor zeigt ein Klick auf einen Animationsschritt, welche Objekte er betrifft.
+      if (isAnim(id) && !presenting) setSelection(id.targets.map((t) => byId.get(t)).filter(Boolean));
     });
     // Am Eintrag lauschen, nicht am Namen: die Zeigererfassung fürs Ziehen lenkt den Doppelklick auf den Eintrag um.
     li.addEventListener("dblclick", () => renameStep(li.querySelector(".label"), id));
@@ -373,7 +377,57 @@ function goTo(i) {
   offPath = false;
   markActive();
   updateProgress();
-  camera.flyTo(frameState(doc.path[pathIndex]));
+  if (presenting) applyVisibility(pathIndex);
+  camera.flyTo(stepCamera(pathIndex));
+}
+
+// ---------- Animationsschritte ----------
+// Ein Pfadeintrag ist entweder die id eines Objekts (Kamerafahrt dorthin) oder ein
+// Animationsschritt { type: "fade-in" | "fade-out", targets: [ids] }. Bei einem
+// Animationsschritt bleibt die Kamera, wo sie ist, und die Objekte werden ein- oder ausgeblendet.
+
+function isAnim(step) {
+  return typeof step === "object" && step !== null;
+}
+
+function animLabel(step) {
+  const names = step.targets.map((t) => stepLabel(byId.get(t)) ?? t).join(", ");
+  return `${step.type === "fade-in" ? "Einblenden" : "Ausblenden"}: ${names}`;
+}
+
+// Die Kamera eines Schritts ist die des letzten Kamera-Schritts davor (oder er selbst).
+function stepCamera(i) {
+  let k = i;
+  while (k > 0 && isAnim(doc.path[k])) k--;
+  return frameState(doc.path[k]);
+}
+
+// Welche Objekte sind bei Schritt i unsichtbar? Wer irgendwo eingeblendet wird, ist anfangs versteckt.
+function hiddenAt(i) {
+  const hidden = new Set();
+  for (const s of doc.path) if (isAnim(s) && s.type === "fade-in") s.targets.forEach((t) => hidden.add(t));
+  for (let k = 0; k <= i; k++) {
+    const s = doc.path[k];
+    if (!isAnim(s)) continue;
+    for (const t of s.targets) s.type === "fade-in" ? hidden.delete(t) : hidden.add(t);
+  }
+  return hidden;
+}
+
+function applyVisibility(i) {
+  const hidden = presenting ? hiddenAt(i) : new Set();
+  for (const el of world.children) el.classList.toggle("anim-hidden", hidden.has(el.dataset.id));
+}
+
+// Animationsschritt für die Auswahl direkt hinter dem aktuellen Schritt einfügen,
+// so ergeben mehrere Klicks nacheinander die richtige Reihenfolge.
+function addAnimation(type) {
+  const targets = selection.filter((o) => !o.hidden).map((o) => o.id);
+  if (!targets.length) return;
+  checkpoint();
+  doc.path.splice(pathIndex + 1, 0, { type, targets });
+  pathIndex += 1;
+  buildPathList();
 }
 
 // Weiter/zurück. Wer beim Präsentieren frei unterwegs war, kommt mit „zurück“ erst zum aktuellen Schritt.
@@ -581,7 +635,10 @@ function deleteSelected() {
   if (!ids.size) return;
   checkpoint();
   doc.objects = doc.objects.filter((o) => !ids.has(o.id));
-  doc.path = doc.path.filter((p) => !ids.has(p));
+  // Gelöschte Objekte verschwinden aus dem Pfad und aus Animationsschritten; leere Schritte fallen weg.
+  doc.path = doc.path
+    .map((p) => (isAnim(p) ? { ...p, targets: p.targets.filter((t) => !ids.has(t)) } : p))
+    .filter((p) => (isAnim(p) ? p.targets.length > 0 : !ids.has(p)));
   pathIndex = Math.min(pathIndex, doc.path.length - 1);
   selection = [];
   selected = null;
@@ -868,7 +925,8 @@ viewport.addEventListener("dblclick", (e) => {
 
 // ---------- Speichern und Öffnen (.weitblick) ----------
 
-const FORMAT_VERSION = 1;
+// Version 2: Pfadeinträge können Animationsschritte sein (Objekte statt nur ids).
+const FORMAT_VERSION = 2;
 const FILTERS = [{ name: "Weitblick-Präsentation", extensions: ["weitblick"] }];
 const tauri = window.__TAURI__;
 
@@ -907,7 +965,7 @@ async function save() {
   try {
     await tauri.core.invoke("save_presentation", {
       path: currentPath,
-      json: JSON.stringify(doc, null, 2),
+      json: JSON.stringify({ ...doc, version: FORMAT_VERSION }, null, 2),
       media: usedMedia(),
     });
     markSaved();
@@ -991,6 +1049,7 @@ async function stopPresentation() {
   if (!presenting) return;
   presenting = false;
   document.body.classList.remove("presenting", "show-controls");
+  applyVisibility(pathIndex); // im Editor ist alles sichtbar
   await setFullscreen(false);
 }
 
@@ -1077,6 +1136,8 @@ on("btn-open", openFile);
 on("btn-save", save);
 on("btn-add-image", chooseImages);
 on("btn-add-to-path", addSelectedToPath);
+on("btn-fade-in", () => addAnimation("fade-in"));
+on("btn-fade-out", () => addAnimation("fade-out"));
 on("btn-bold", toggleBold);
 on("btn-italic", toggleItalic);
 on("btn-align", cycleAlign);
@@ -1099,7 +1160,7 @@ tauri?.webview?.getCurrentWebview().onDragDropEvent(async (event) => {
 
 new ResizeObserver(() => {
   // Beim Präsentieren bleibt der aktuelle Rahmen eingepasst, auch wenn sich die Fenstergröße ändert.
-  if (presenting && !offPath && !camera.anim) camera.set(frameState(doc.path[pathIndex]));
+  if (presenting && !offPath && !camera.anim) camera.set(stepCamera(pathIndex));
   else render();
 }).observe(viewport);
 
