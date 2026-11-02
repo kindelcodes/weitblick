@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Farben und Animationsschritte.
+> Frühes Entwicklungsstadium. Es fehlen u. a. Kopieren/Einfügen, Mehrfachauswahl und Animationsschritte.
 
 ## Bedienung
 
@@ -21,6 +21,8 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 | Größe ändern | Anfasser unten rechts, Umschalt hält das Seitenverhältnis |
 | Text bearbeiten | Doppelklick auf den Text, Esc beendet |
 | Löschen | Entf |
+| Farbe, Schrift, Fett, Kursiv, Ausrichtung | Formatleiste über der Leinwand, sobald etwas ausgewählt ist; Strg+B / Strg+I |
+| Pfadschritt umbenennen | Doppelklick auf den Eintrag in der Pfadliste, Enter übernimmt |
 | Pfad umsortieren | Eintrag in der Pfadliste nach oben/unten ziehen |
 | Objekt als Pfadschritt (auch mehrmals) | Objekt auswählen, „+ Pfad“ |
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |

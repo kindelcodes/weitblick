@@ -47,6 +47,18 @@
 
     <main id="viewport" class="viewport">
       <div id="world" class="world"></div>
+      <div id="formatbar" class="formatbar">
+        <label class="color" title="Farbe"><input type="color" id="inp-color" data-needs="color" /></label>
+        <span class="sep"></span>
+        <select id="sel-font" data-needs="text" title="Schriftart">
+          <option value="sans">Serifenlos</option>
+          <option value="serif">Serif</option>
+          <option value="mono">Schreibmaschine</option>
+        </select>
+        <button id="btn-bold" data-needs="text" title="Fett (Strg+B)"><b>B</b></button>
+        <button id="btn-italic" data-needs="text" title="Kursiv (Strg+I)"><i>I</i></button>
+        <button id="btn-align" data-needs="text" title="Ausrichtung wechseln">⇤</button>
+      </div>
       <div class="progress"><div id="progress-bar"></div></div>
       <div class="present-controls">
         <button id="pc-prev" title="Zurück (←)">‹</button>

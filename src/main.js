@@ -161,6 +161,7 @@ function makeEl(o) {
 function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
   if (o.type === "shape") el.style.background = o.fill;
+  if (o.type === "frame") el.style.background = o.fill || "";
   if (o.type === "image") {
     const m = media.get(o.src);
     el.style.backgroundImage = m ? `url("${m.url}")` : "";
@@ -173,6 +174,8 @@ function updateEl(o, el = elOf(o)) {
       color: o.color || doc.theme.text,
       textAlign: o.align || "left",
       fontWeight: o.weight || 400,
+      fontStyle: o.italic ? "italic" : "normal",
+      fontFamily: FONTS[o.font] ?? FONTS.sans,
     });
   }
   el.classList.toggle("selected", o === selected);
@@ -235,9 +238,11 @@ function buildPathList() {
     li.innerHTML = `<span class="num"></span><span class="label"></span><button class="remove" title="Aus dem Pfad entfernen">×</button>`;
     li.querySelector(".num").textContent = id === doc.path[0] ? "⌂" : i;
     li.querySelector(".label").textContent = stepLabel(byId.get(id)) ?? id;
-    li.addEventListener("click", () => {
-      if (!pathDrag?.moved) goTo(i);
+    li.addEventListener("click", (e) => {
+      if (!pathDrag?.moved && !e.target.isContentEditable) goTo(i);
     });
+    // Am Eintrag lauschen, nicht am Namen: die Zeigererfassung fürs Ziehen lenkt den Doppelklick auf den Eintrag um.
+    li.addEventListener("dblclick", () => renameStep(li.querySelector(".label"), id));
     const remove = li.querySelector(".remove");
     if (i === 0) remove.remove();
     else li.addEventListener("pointerdown", (e) => startPathDrag(e, i));
@@ -267,8 +272,30 @@ function stepLabel(o) {
 
 let pathDrag = null;
 
+// Doppelklick auf einen Eintrag: Namen direkt in der Liste ändern, Enter oder Klick daneben übernimmt.
+function renameStep(label, id) {
+  const o = byId.get(id);
+  if (!o) return;
+  label.contentEditable = "plaintext-only";
+  label.focus();
+  document.getSelection().selectAllChildren(label);
+  label.addEventListener(
+    "blur",
+    () => {
+      label.contentEditable = "false";
+      const title = label.textContent.trim();
+      if (title && title !== stepLabel(o)) {
+        checkpoint();
+        o.title = title;
+      }
+      buildPathList();
+    },
+    { once: true },
+  );
+}
+
 function startPathDrag(e, from) {
-  if (e.button !== 0 || e.target.closest(".remove")) return;
+  if (e.button !== 0 || e.target.closest(".remove") || e.target.isContentEditable) return;
   pathDrag = { from, y: e.clientY, moved: false, to: from, li: e.currentTarget };
   e.currentTarget.setPointerCapture(e.pointerId);
 }
@@ -362,10 +389,89 @@ function select(o) {
 
 function updateToolbar() {
   const isText = selected?.type === "text";
+  const colored = colorKey(selected) !== null;
   document.querySelectorAll("[data-needs]").forEach((b) => {
     const need = b.dataset.needs;
-    b.disabled = !selected || (need === "text" && !isText);
+    b.disabled = !selected || (need === "text" && !isText) || (need === "color" && !colored);
   });
+  // Formatleiste zeigt den Zustand des ausgewählten Objekts.
+  formatbar.classList.toggle("visible", !!selected && !presenting);
+  if (!selected) return;
+  if (colored) colorInput.value = toHex(selected[colorKey(selected)] ?? defaultColor(selected));
+  if (isText) {
+    fontSelect.value = selected.font ?? "sans";
+    document.getElementById("btn-bold").classList.toggle("on", (selected.weight ?? 400) >= 600);
+    document.getElementById("btn-italic").classList.toggle("on", !!selected.italic);
+    document.getElementById("btn-align").textContent = ALIGN_ICONS[selected.align ?? "left"];
+  }
+}
+
+// ---------- Farben und Textformat ----------
+
+const FONTS = {
+  sans: '"Segoe UI", "Noto Sans", "DejaVu Sans", sans-serif',
+  serif: 'Georgia, "Noto Serif", "DejaVu Serif", serif',
+  mono: 'Consolas, "DejaVu Sans Mono", monospace',
+};
+const ALIGNS = ["left", "center", "right"];
+const ALIGN_ICONS = { left: "⇤", center: "⇔", right: "⇥" };
+
+const formatbar = document.getElementById("formatbar");
+const colorInput = document.getElementById("inp-color");
+const fontSelect = document.getElementById("sel-font");
+
+// Welches Feld eines Objekts die Farbe trägt.
+function colorKey(o) {
+  return { text: "color", shape: "fill", frame: "fill" }[o?.type] ?? null;
+}
+
+function defaultColor(o) {
+  return o.type === "text" ? doc.theme.text : o.type === "frame" ? doc.theme.background : doc.theme.accent;
+}
+
+// Farbwähler kennen nur #rrggbb.
+function toHex(c) {
+  if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+  if (/^#[0-9a-f]{3}$/i.test(c)) return "#" + [...c.slice(1)].map((x) => x + x).join("");
+  return "#ffffff";
+}
+
+// Eine Änderung am ausgewählten Objekt, rückgängig machbar.
+function format(change) {
+  if (!selected) return;
+  checkpoint();
+  change(selected);
+  updateEl(selected);
+  updateToolbar();
+}
+
+// Beim Ziehen im Farbwähler live anzeigen, aber nur einen Rückgängig-Schritt anlegen.
+let colorBefore = null;
+colorInput.addEventListener("pointerdown", () => (colorBefore = snapshot()));
+colorInput.addEventListener("input", () => {
+  if (!selected || !colorKey(selected)) return;
+  colorBefore ??= snapshot();
+  selected[colorKey(selected)] = colorInput.value;
+  updateEl(selected);
+});
+colorInput.addEventListener("change", () => {
+  if (colorBefore && colorBefore !== snapshot()) checkpoint(colorBefore);
+  colorBefore = null;
+});
+
+fontSelect.addEventListener("change", () => format((o) => (o.font = fontSelect.value)));
+
+function toggleBold() {
+  if (selected?.type === "text") format((o) => (o.weight = (o.weight ?? 400) >= 600 ? 400 : 700));
+}
+
+function toggleItalic() {
+  if (selected?.type === "text") format((o) => (o.italic = !o.italic));
+}
+
+function cycleAlign() {
+  if (selected?.type !== "text") return;
+  format((o) => (o.align = ALIGNS[(ALIGNS.indexOf(o.align ?? "left") + 1) % ALIGNS.length]));
 }
 
 function startEditing(o) {
@@ -465,6 +571,8 @@ let gesture = null;
 
 viewport.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1) return;
+  // Leisten über der Leinwand bekommen ihre Klicks selbst, sonst würde die Zeigererfassung sie schlucken.
+  if (e.target.closest(".formatbar, .present-controls")) return;
   if (presenting) {
     // Beim Präsentieren wird nichts bearbeitet: ziehen verschiebt, ein Klick fliegt zum Objekt.
     camera.stop();
@@ -560,7 +668,7 @@ function zoomAt(factor, sx, sy) {
 
 // Doppelklick: Text bearbeiten, sonst zum kleinsten Rahmen unter dem Zeiger fliegen.
 viewport.addEventListener("dblclick", (e) => {
-  if (presenting) return;
+  if (presenting || e.target.closest(".formatbar")) return;
   // Wegen der Zeigererfassung ist e.target hier der Viewport, also selbst nachsehen.
   const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".obj.text");
   if (el) {
@@ -729,8 +837,17 @@ document.addEventListener("keydown", (e) => {
     openFile();
     return;
   }
+  if (e.ctrlKey && !presenting && selected?.type === "text" && ["b", "B", "i", "I"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key.toLowerCase() === "b") toggleBold();
+    else toggleItalic();
+    return;
+  }
   if (isEditing()) {
-    if (e.key === "Escape") document.activeElement.blur();
+    if (e.key === "Escape" || (e.key === "Enter" && e.target.closest?.("#path-list"))) {
+      e.preventDefault();
+      document.activeElement.blur();
+    }
     return;
   }
   if (e.ctrlKey && !presenting && ["z", "Z", "y", "Y"].includes(e.key)) {
@@ -773,6 +890,9 @@ on("btn-open", openFile);
 on("btn-save", save);
 on("btn-add-image", chooseImages);
 on("btn-add-to-path", addSelectedToPath);
+on("btn-bold", toggleBold);
+on("btn-italic", toggleItalic);
+on("btn-align", cycleAlign);
 on("btn-undo", undo);
 on("btn-redo", redo);
 
