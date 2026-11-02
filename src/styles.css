@@ -45,10 +45,15 @@ body {
 
 .doc-title {
   color: var(--muted);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tools {
   margin-left: auto;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -62,6 +67,7 @@ body {
   background: none;
   font: inherit;
   font-size: 14px;
+  white-space: nowrap;
   cursor: pointer;
   color: var(--panel-text);
 }
@@ -327,6 +333,15 @@ body.presenting:not(.show-controls) .viewport {
 
 .obj.shape.ellipse {
   border-radius: 50%;
+}
+
+.obj.image {
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.obj.image.missing {
+  background: repeating-linear-gradient(45deg, #2a2c33 0 10px, #33363e 10px 20px);
 }
 
 .navbar {

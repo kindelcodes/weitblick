@@ -20,6 +20,129 @@ let presenting = false;
 let selected = null;
 let nextId = 1;
 
+// ---------- Rückgängig und Wiederholen ----------
+// Vor jeder Änderung wird der Stand von Objekten und Pfad als Text gemerkt.
+
+const HISTORY_LIMIT = 100;
+let undoStack = [];
+let redoStack = [];
+let savedSnapshot = null;
+
+function snapshot() {
+  return JSON.stringify({ objects: doc.objects, path: doc.path });
+}
+
+function checkpoint(before = snapshot()) {
+  undoStack.push(before);
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  redoStack = [];
+  showFileName();
+}
+
+function restore(snap) {
+  const s = JSON.parse(snap);
+  doc.objects = s.objects;
+  doc.path = s.path;
+  selected = null;
+  pathIndex = Math.min(pathIndex, doc.path.length - 1);
+  buildWorld();
+  buildPathList();
+  updateToolbar();
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  restore(undoStack.pop());
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  restore(redoStack.pop());
+}
+
+function isDirty() {
+  return snapshot() !== savedSnapshot;
+}
+
+function markSaved() {
+  savedSnapshot = snapshot();
+  showFileName();
+}
+
+// ---------- Medien ----------
+// Bilder liegen im Speicher als Base64 (für die Datei) und als Blob-Adresse (für die Anzeige).
+
+const media = new Map();
+const MIME = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+};
+
+function extOf(name) {
+  return name.split(".").pop().toLowerCase();
+}
+
+function addMedia(name, data) {
+  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: MIME[extOf(name)] ?? "application/octet-stream" }));
+  media.set(name, { data, url });
+}
+
+function clearMedia() {
+  for (const m of media.values()) URL.revokeObjectURL(m.url);
+  media.clear();
+}
+
+function imageSize(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+    img.onerror = () => resolve({ w: 4, h: 3 });
+    img.src = url;
+  });
+}
+
+// Bilder von der Festplatte einfügen, um einen Punkt der Leinwand herum (sonst in der Bildmitte).
+async function insertImages(paths, at) {
+  const files = paths.filter((p) => MIME[extOf(p)]);
+  if (!files.length) return;
+  checkpoint();
+  let offset = 0;
+  let last = null;
+  for (const path of files) {
+    const file = await tauri.core.invoke("import_media", { path });
+    const id = newId("i");
+    const src = `media/${id}.${extOf(file.name)}`;
+    addMedia(src, file.data);
+    const size = await imageSize(media.get(src).url);
+    const w = camera.w * 0.35;
+    const h = (w * size.h) / size.w;
+    const c = at ?? { x: camera.cx, y: camera.cy };
+    const o = { id, type: "image", src, x: c.x - w / 2 + offset, y: c.y - h / 2 + offset, w, h };
+    doc.objects.push(o);
+    byId.set(id, o);
+    world.append(makeEl(o));
+    offset += camera.w * 0.03;
+    last = o;
+  }
+  select(last);
+}
+
+async function chooseImages() {
+  const paths = await tauri.dialog.open({
+    multiple: true,
+    filters: [{ name: "Bilder", extensions: Object.keys(MIME) }],
+  });
+  if (paths) await insertImages([].concat(paths));
+}
+
 const camera = new Camera(render);
 
 // ---------- Darstellung ----------
@@ -38,6 +161,11 @@ function makeEl(o) {
 function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
   if (o.type === "shape") el.style.background = o.fill;
+  if (o.type === "image") {
+    const m = media.get(o.src);
+    el.style.backgroundImage = m ? `url("${m.url}")` : "";
+    el.classList.toggle("missing", !m);
+  }
   if (o.type === "text") {
     if (!el.isContentEditable) el.textContent = o.text;
     Object.assign(el.style, {
@@ -113,6 +241,7 @@ function buildPathList() {
     else
       remove.addEventListener("click", (e) => {
         e.stopPropagation();
+        checkpoint();
         doc.path.splice(i, 1);
         if (pathIndex >= doc.path.length) pathIndex = doc.path.length - 1;
         buildPathList();
@@ -181,7 +310,10 @@ function finishEditing(el) {
   el.contentEditable = "false";
   const o = byId.get(el.dataset.id);
   if (!o) return;
-  o.text = el.innerText;
+  if (o.text !== el.innerText) {
+    checkpoint();
+    o.text = el.innerText;
+  }
   updateEl(o, el);
 }
 
@@ -198,6 +330,7 @@ function newId(prefix) {
 
 // Neues Objekt in der Mitte der aktuellen Ansicht, passend zur Zoomstufe.
 function addObject(kind) {
+  checkpoint();
   const vw = camera.w;
   const base = { x: 0, y: 0 };
   let o;
@@ -221,6 +354,7 @@ function addObject(kind) {
 
 function deleteSelected() {
   if (!selected || selected.id === doc.path[0]) return;
+  checkpoint();
   const id = selected.id;
   doc.objects = doc.objects.filter((o) => o.id !== id);
   doc.path = doc.path.filter((p) => p !== id);
@@ -232,6 +366,7 @@ function deleteSelected() {
 
 function changeTextSize(factor) {
   if (selected?.type !== "text") return;
+  checkpoint();
   selected.size *= factor;
   updateEl(selected);
 }
@@ -273,14 +408,14 @@ viewport.addEventListener("pointerdown", (e) => {
   const start = eventToWorld(e);
 
   if (e.button === 0 && e.target.classList.contains("handle") && selected) {
-    gesture = { kind: "resize", start, o: selected, w: selected.w, h: selected.h, size: selected.size };
+    gesture = { kind: "resize", start, o: selected, w: selected.w, h: selected.h, before: snapshot() };
   } else {
     const o = e.button === 0 ? hitObject(e) : null;
     if (o) {
       select(o);
       // Ein Rahmen nimmt alles mit, was ganz in ihm liegt.
       const group = o.type === "frame" ? doc.objects.filter((p) => p !== o && !p.hidden && inside(p, o)) : [];
-      gesture = { kind: "move", start, items: [o, ...group].map((p) => ({ p, x: p.x, y: p.y })) };
+      gesture = { kind: "move", start, items: [o, ...group].map((p) => ({ p, x: p.x, y: p.y })), before: snapshot() };
     } else {
       select(null);
       gesture = { kind: "pan", x: e.clientX, y: e.clientY, cx: camera.cx, cy: camera.cy };
@@ -310,8 +445,9 @@ viewport.addEventListener("pointermove", (e) => {
     const o = gesture.o;
     const minSize = 4 / zoom();
     o.w = Math.max(minSize, gesture.w + dx);
-    // Kreise und Quadrate behalten mit gedrückter Umschalttaste ihr Seitenverhältnis.
-    o.h = e.shiftKey ? o.w * (gesture.h / gesture.w) : Math.max(minSize, gesture.h + dy);
+    // Bilder behalten ihr Seitenverhältnis, andere Objekte nur mit gedrückter Umschalttaste.
+    const keepAspect = o.type === "image" ? !e.shiftKey : e.shiftKey;
+    o.h = keepAspect ? o.w * (gesture.h / gesture.w) : Math.max(minSize, gesture.h + dy);
     updateEl(o);
   }
 });
@@ -320,6 +456,7 @@ const endGesture = (e) => {
   const g = gesture;
   gesture = null;
   viewport.classList.remove("dragging");
+  if (g?.before && snapshot() !== g.before) checkpoint(g.before);
   const isClick = g?.kind === "pan" && e?.type === "pointerup" && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 4;
   if (presenting && isClick && g.target) flyToObject(byId.get(g.target.dataset.id));
 };
@@ -377,7 +514,24 @@ const tauri = window.__TAURI__;
 
 function showFileName() {
   const name = currentPath ? currentPath.split(/[\\/]/).pop() : "nicht gespeichert";
-  document.getElementById("doc-title").textContent = `${doc.title} · ${name}`;
+  const dirty = savedSnapshot !== null && isDirty() ? " •" : "";
+  document.getElementById("doc-title").textContent = `${doc.title} · ${name}${dirty}`;
+}
+
+// Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
+function usedMedia() {
+  const names = new Set(doc.objects.filter((o) => o.type === "image").map((o) => o.src));
+  return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
+}
+
+async function confirmDiscard() {
+  if (!isDirty()) return true;
+  return tauri.dialog.ask("Es gibt ungespeicherte Änderungen. Trotzdem fortfahren?", {
+    title: "Weitblick",
+    kind: "warning",
+    okLabel: "Verwerfen",
+    cancelLabel: "Abbrechen",
+  });
 }
 
 async function saveAs() {
@@ -391,28 +545,38 @@ async function save() {
   if (!currentPath) return saveAs();
   if (isEditing()) document.activeElement.blur();
   try {
-    await tauri.core.invoke("save_presentation", { path: currentPath, json: JSON.stringify(doc, null, 2) });
-    showFileName();
+    await tauri.core.invoke("save_presentation", {
+      path: currentPath,
+      json: JSON.stringify(doc, null, 2),
+      media: usedMedia(),
+    });
+    markSaved();
   } catch (err) {
     await tauri.dialog.message(String(err), { title: "Speichern fehlgeschlagen", kind: "error" });
   }
 }
 
 async function openFile() {
+  if (!(await confirmDiscard())) return;
   const path = await tauri.dialog.open({ filters: FILTERS, multiple: false });
   if (!path) return;
   try {
-    const loaded = JSON.parse(await tauri.core.invoke("open_presentation", { path }));
+    const result = await tauri.core.invoke("open_presentation", { path });
+    const loaded = JSON.parse(result.json);
     if (loaded.format !== "weitblick") throw new Error("Das ist keine Weitblick-Präsentation.");
     if (loaded.version > FORMAT_VERSION) throw new Error("Die Datei stammt aus einer neueren Weitblick-Version.");
+    clearMedia();
+    for (const m of result.media) addMedia(m.name, m.data);
     doc = loaded;
     currentPath = path;
+    undoStack = [];
+    redoStack = [];
     selected = null;
     pathIndex = 0;
     buildWorld();
     buildPathList();
     updateToolbar();
-    showFileName();
+    markSaved();
     camera.set(frameState(doc.path[0]));
   } catch (err) {
     await tauri.dialog.message(String(err.message ?? err), { title: "Öffnen fehlgeschlagen", kind: "error" });
@@ -498,6 +662,12 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") document.activeElement.blur();
     return;
   }
+  if (e.ctrlKey && !presenting && ["z", "Z", "y", "Y"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key.toLowerCase() === "y" || e.shiftKey) redo();
+    else undo();
+    return;
+  }
   if (e.key === "F5") startPresentation(e.shiftKey);
   else if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) step(1);
   else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) step(-1);
@@ -530,6 +700,23 @@ on("btn-text-bigger", () => changeTextSize(1.15));
 on("btn-delete", deleteSelected);
 on("btn-open", openFile);
 on("btn-save", save);
+on("btn-add-image", chooseImages);
+on("btn-undo", undo);
+on("btn-redo", redo);
+
+// Vor dem Schließen nachfragen, wenn noch etwas ungespeichert ist.
+appWindow?.onCloseRequested(async (event) => {
+  if (!(await confirmDiscard())) event.preventDefault();
+});
+
+// Bilddateien aus dem Explorer auf die Leinwand ziehen.
+tauri?.webview?.getCurrentWebview().onDragDropEvent(async (event) => {
+  if (event.payload.type !== "drop" || presenting) return;
+  const r = viewport.getBoundingClientRect();
+  const { x, y } = event.payload.position; // in Gerätepixeln
+  const at = screenToWorld(x / devicePixelRatio - r.left, y / devicePixelRatio - r.top);
+  await insertImages(event.payload.paths, at);
+});
 
 new ResizeObserver(() => {
   // Beim Präsentieren bleibt der aktuelle Rahmen eingepasst, auch wenn sich die Fenstergröße ändert.
@@ -542,5 +729,5 @@ new ResizeObserver(() => {
 buildWorld();
 buildPathList();
 updateToolbar();
-showFileName();
+markSaved();
 camera.set(frameState(doc.path[0]));

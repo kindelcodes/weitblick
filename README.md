@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Rückgängig, Bilder und Farben.
+> Frühes Entwicklungsstadium. Es fehlen u. a. Farben, Pfad umsortieren und Animationsschritte.
 
 ## Bedienung
 
@@ -21,6 +21,8 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 | Größe ändern | Anfasser unten rechts, Umschalt hält das Seitenverhältnis |
 | Text bearbeiten | Doppelklick auf den Text, Esc beendet |
 | Löschen | Entf |
+| Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
+| Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
@@ -31,7 +33,7 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 Eine ZIP-Datei mit:
 
 - `presentation.json`: Leinwand, Objekte, Rahmen, Pfad und Thema. Hat ein Feld `version` für spätere Formatänderungen.
-- `media/`: Bilder und Videos in Originalform (geplant)
+- `media/`: eingefügte Bilder in Originalform (unkomprimiert abgelegt, weil sie schon komprimiert sind)
 
 ## Bauen
 
