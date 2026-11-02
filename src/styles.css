@@ -402,7 +402,27 @@ body.presenting:not(.show-controls) .viewport {
 
 .obj {
   position: absolute;
-  transform-origin: 0 0;
+  transform-origin: 50% 50%; /* gedreht wird um die Mitte */
+}
+
+.obj .rot-handle {
+  position: absolute;
+  left: 50%;
+  top: calc(-30px * var(--inv, 1));
+  width: calc(12px * var(--inv, 1));
+  height: calc(12px * var(--inv, 1));
+  margin-left: calc(-6px * var(--inv, 1));
+  background: #fff;
+  border: calc(2px * var(--inv, 1)) solid var(--accent);
+  border-radius: 50%;
+  cursor: grab;
+}
+
+.marquee {
+  position: absolute;
+  border: 1px dashed var(--accent);
+  background: rgba(47, 111, 237, 0.12);
+  pointer-events: none;
 }
 
 .obj.frame {

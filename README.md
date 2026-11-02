@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Kopieren/Einfügen, Mehrfachauswahl und Animationsschritte.
+> Frühes Entwicklungsstadium. Es fehlen u. a. Animationsschritte, Sprechernotizen und PDF-Export.
 
 ## Bedienung
 
@@ -18,6 +18,10 @@ Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), n
 | Überblick | Pos1 |
 | Zu einem Rahmen fliegen | Doppelklick in den Rahmen |
 | Objekt auswählen / bewegen | anklicken und ziehen (Rahmen an ihrer Kante) |
+| Mehrere auswählen | Umschalt+Klick, Umschalt+Ziehen auf leerer Fläche (Auswahlrechteck), Strg+A |
+| Kopieren / Ausschneiden / Einfügen / Duplizieren | Strg+C / Strg+X / Strg+V / Strg+D; Rahmen nehmen ihren Inhalt mit |
+| Bild aus der Zwischenablage | Strg+V (z. B. nach einem Bildschirmfoto) |
+| Drehen | runder Anfasser über dem Objekt, Umschalt rastet in 15°-Schritten ein |
 | Größe ändern | Anfasser unten rechts, Umschalt hält das Seitenverhältnis |
 | Text bearbeiten | Doppelklick auf den Text, Esc beendet |
 | Löschen | Entf |

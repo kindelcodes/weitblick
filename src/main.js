@@ -17,7 +17,8 @@ let byId = new Map();
 let pathIndex = 0;
 let offPath = false; // beim Präsentieren frei zu einem Objekt geflogen
 let presenting = false;
-let selected = null;
+let selected = null; // zuletzt gewähltes Objekt: Formatleiste und Anfasser beziehen sich darauf
+let selection = []; // alle ausgewählten Objekte
 let nextId = 1;
 
 // ---------- Rückgängig und Wiederholen ----------
@@ -43,6 +44,7 @@ function restore(snap) {
   const s = JSON.parse(snap);
   doc.objects = s.objects;
   doc.path = s.path;
+  selection = [];
   selected = null;
   pathIndex = Math.min(pathIndex, doc.path.length - 1);
   buildWorld();
@@ -114,25 +116,30 @@ async function insertImages(paths, at) {
   const files = paths.filter((p) => MIME[extOf(p)]);
   if (!files.length) return;
   checkpoint();
-  let offset = 0;
-  let last = null;
+  const placed = [];
   for (const path of files) {
     const file = await tauri.core.invoke("import_media", { path });
-    const id = newId("i");
-    const src = `media/${id}.${extOf(file.name)}`;
-    addMedia(src, file.data);
-    const size = await imageSize(media.get(src).url);
-    const w = camera.w * 0.35;
-    const h = (w * size.h) / size.w;
-    const c = at ?? { x: camera.cx, y: camera.cy };
-    const o = { id, type: "image", src, x: c.x - w / 2 + offset, y: c.y - h / 2 + offset, w, h };
-    doc.objects.push(o);
-    byId.set(id, o);
-    world.append(makeEl(o));
-    offset += camera.w * 0.03;
-    last = o;
+    placed.push(await placeImage(extOf(file.name), file.data, at, placed.length));
   }
-  select(last);
+  setSelection(placed);
+}
+
+// Ein Bild (Base64) auf die Leinwand legen. Der Aufrufer legt vorher den Rückgängig-Punkt an.
+async function placeImage(ext, data, at = null, index = 0) {
+  const id = newId("i");
+  const src = `media/${id}.${ext}`;
+  addMedia(src, data);
+  const size = await imageSize(media.get(src).url);
+  const w = camera.w * 0.35;
+  const h = (w * size.h) / size.w;
+  const c = at ?? { x: camera.cx, y: camera.cy };
+  const offset = camera.w * 0.03 * index;
+  const o = { id, type: "image", src, x: c.x - w / 2 + offset, y: c.y - h / 2 + offset, w, h };
+  doc.objects.push(o);
+  byId.set(id, o);
+  world.append(makeEl(o));
+  select(o);
+  return o;
 }
 
 async function chooseImages() {
@@ -178,12 +185,16 @@ function updateEl(o, el = elOf(o)) {
       fontFamily: FONTS[o.font] ?? FONTS.sans,
     });
   }
-  el.classList.toggle("selected", o === selected);
-  el.querySelector(".handle")?.remove();
-  if (o === selected) {
-    const h = document.createElement("div");
-    h.className = "handle";
-    el.append(h);
+  el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
+  el.classList.toggle("selected", selection.includes(o));
+  el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove());
+  // Anfasser nur bei genau einem ausgewählten Objekt.
+  if (o === selected && selection.length === 1) {
+    for (const cls of ["handle", "rot-handle"]) {
+      const h = document.createElement("div");
+      h.className = cls;
+      el.append(h);
+    }
   }
 }
 
@@ -379,12 +390,34 @@ function addToPath(id) {
 
 // ---------- Auswahl und Bearbeiten ----------
 
-function select(o) {
-  const prev = selected;
-  selected = o;
-  if (prev && byId.has(prev.id)) updateEl(prev);
-  if (o) updateEl(o);
+// Mit additive (Umschalt) wird ein Objekt zur Auswahl hinzugefügt oder wieder entfernt.
+function select(o, additive = false) {
+  if (!o) setSelection([]);
+  else if (!additive) setSelection([o]);
+  else setSelection(selection.includes(o) ? selection.filter((p) => p !== o) : [...selection, o]);
+}
+
+function setSelection(list) {
+  const prev = selection;
+  selection = list;
+  selected = list.at(-1) ?? null;
+  for (const p of new Set([...prev, ...list])) if (byId.has(p.id)) updateEl(p);
   updateToolbar();
+}
+
+function selectAll() {
+  setSelection(doc.objects.filter((o) => !o.hidden));
+}
+
+// Rahmen nehmen alles mit, was ganz in ihnen liegt (beim Verschieben und Kopieren).
+function withContents(list) {
+  const result = new Set(list);
+  for (const f of list) {
+    if (f.type !== "frame") continue;
+    for (const p of doc.objects) if (p !== f && !p.hidden && inside(p, f)) result.add(p);
+  }
+  // In der Reihenfolge der Leinwand, damit Ebenen beim Kopieren erhalten bleiben.
+  return doc.objects.filter((o) => result.has(o));
 }
 
 function updateToolbar() {
@@ -436,42 +469,56 @@ function toHex(c) {
   return "#ffffff";
 }
 
-// Eine Änderung am ausgewählten Objekt, rückgängig machbar.
-function format(change) {
-  if (!selected) return;
+// Eine Änderung an allen passenden ausgewählten Objekten, als ein Rückgängig-Schritt.
+function format(change, applies = () => true) {
+  const targets = selection.filter(applies);
+  if (!targets.length) return;
   checkpoint();
-  change(selected);
-  updateEl(selected);
+  for (const o of targets) {
+    change(o);
+    updateEl(o);
+  }
   updateToolbar();
 }
+
+const isText = (o) => o.type === "text";
 
 // Beim Ziehen im Farbwähler live anzeigen, aber nur einen Rückgängig-Schritt anlegen.
 let colorBefore = null;
 colorInput.addEventListener("pointerdown", () => (colorBefore = snapshot()));
 colorInput.addEventListener("input", () => {
-  if (!selected || !colorKey(selected)) return;
+  const targets = selection.filter((o) => colorKey(o));
+  if (!targets.length) return;
   colorBefore ??= snapshot();
-  selected[colorKey(selected)] = colorInput.value;
-  updateEl(selected);
+  for (const o of targets) {
+    o[colorKey(o)] = colorInput.value;
+    updateEl(o);
+  }
 });
 colorInput.addEventListener("change", () => {
   if (colorBefore && colorBefore !== snapshot()) checkpoint(colorBefore);
   colorBefore = null;
 });
 
-fontSelect.addEventListener("change", () => format((o) => (o.font = fontSelect.value)));
+fontSelect.addEventListener("change", () => format((o) => (o.font = fontSelect.value), isText));
 
+// Der neue Zustand richtet sich nach dem zuletzt gewählten Text und gilt dann für alle.
 function toggleBold() {
-  if (selected?.type === "text") format((o) => (o.weight = (o.weight ?? 400) >= 600 ? 400 : 700));
+  if (selected?.type !== "text") return;
+  const weight = (selected.weight ?? 400) >= 600 ? 400 : 700;
+  format((o) => (o.weight = weight), isText);
 }
 
 function toggleItalic() {
-  if (selected?.type === "text") format((o) => (o.italic = !o.italic));
+  if (selected?.type !== "text") return;
+  const italic = !selected.italic;
+  format((o) => (o.italic = italic), isText);
 }
 
 function cycleAlign() {
   if (selected?.type !== "text") return;
-  format((o) => (o.align = ALIGNS[(ALIGNS.indexOf(o.align ?? "left") + 1) % ALIGNS.length]));
+  const align = ALIGNS[(ALIGNS.indexOf(selected.align ?? "left") + 1) % ALIGNS.length];
+  format((o) => (o.align = align), isText);
 }
 
 function startEditing(o) {
@@ -530,11 +577,13 @@ function addObject(kind) {
 }
 
 function deleteSelected() {
-  if (!selected || selected.id === doc.path[0]) return;
+  const ids = new Set(selection.filter((o) => o.id !== doc.path[0]).map((o) => o.id));
+  if (!ids.size) return;
   checkpoint();
-  const id = selected.id;
-  doc.objects = doc.objects.filter((o) => o.id !== id);
-  doc.path = doc.path.filter((p) => p !== id);
+  doc.objects = doc.objects.filter((o) => !ids.has(o.id));
+  doc.path = doc.path.filter((p) => !ids.has(p));
+  pathIndex = Math.min(pathIndex, doc.path.length - 1);
+  selection = [];
   selected = null;
   buildWorld();
   buildPathList();
@@ -542,11 +591,84 @@ function deleteSelected() {
 }
 
 function changeTextSize(factor) {
-  if (selected?.type !== "text") return;
-  checkpoint();
-  selected.size *= factor;
-  updateEl(selected);
+  format((o) => (o.size *= factor), isText);
 }
+
+// ---------- Kopieren, Ausschneiden, Einfügen, Duplizieren ----------
+// Die Objekte liegen in einer internen Ablage; in die Systemablage kommt nur eine Markierung,
+// damit Strg+V weiß, ob zuletzt Objekte aus Weitblick oder z. B. ein Bildschirmfoto kopiert wurden.
+
+const CLIP_MARK = "weitblick-objekte:";
+let clipboard = null;
+
+function copySelection() {
+  if (!selection.length) return false;
+  const items = withContents(selection).filter((o) => !o.hidden);
+  clipboard = { id: Date.now().toString(36), items: structuredClone(items), pastes: 0 };
+  navigator.clipboard?.writeText(CLIP_MARK + clipboard.id).catch(() => {});
+  return true;
+}
+
+function cutSelection() {
+  if (copySelection()) deleteSelected();
+}
+
+function pasteObjects(source = clipboard) {
+  if (!source?.items.length) return;
+  checkpoint();
+  source.pastes += 1;
+  const shift = camera.w * 0.03 * source.pastes;
+  const ids = new Map();
+  const copies = source.items.map((o) => {
+    const c = structuredClone(o);
+    c.id = newId(o.type[0]);
+    ids.set(o.id, c.id);
+    c.x += shift;
+    c.y += shift;
+    return c;
+  });
+  // Rahmen hinter alles andere, der Rest obendrauf; neue Rahmen kommen auch in den Pfad.
+  const frames = copies.filter((c) => c.type === "frame");
+  doc.objects.splice(1, 0, ...frames);
+  doc.objects.push(...copies.filter((c) => c.type !== "frame"));
+  buildWorld();
+  for (const f of frames) addToPath(f.id);
+  const tops = source.items.filter((o) => selectionWasTop(o, source));
+  setSelection(tops.map((o) => byId.get(ids.get(o.id))));
+}
+
+// Beim Einfügen sind nur die ursprünglich gewählten Objekte ausgewählt, nicht der mitkopierte Rahmeninhalt.
+function selectionWasTop(o, source) {
+  return !source.items.some((f) => f !== o && f.type === "frame" && inside(o, f));
+}
+
+function duplicateSelection() {
+  if (!selection.length) return;
+  const items = structuredClone(withContents(selection).filter((o) => !o.hidden));
+  pasteObjects({ items, pastes: 0 });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+document.addEventListener("paste", async (e) => {
+  if (isEditing() || presenting) return;
+  const text = e.clipboardData?.getData("text/plain") ?? "";
+  const image = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith("image/"));
+  e.preventDefault();
+  if (clipboard && text === CLIP_MARK + clipboard.id) pasteObjects();
+  else if (image) {
+    const ext = { "image/jpeg": "jpg", "image/svg+xml": "svg" }[image.type] ?? image.type.split("/")[1];
+    checkpoint();
+    await placeImage(ext, await blobToBase64(image));
+  } else if (clipboard) pasteObjects();
+});
 
 function inside(a, b) {
   return a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
@@ -588,13 +710,27 @@ viewport.addEventListener("pointerdown", (e) => {
 
   if (e.button === 0 && e.target.classList.contains("handle") && selected) {
     gesture = { kind: "resize", start, o: selected, w: selected.w, h: selected.h, before: snapshot() };
+  } else if (e.button === 0 && e.target.classList.contains("rot-handle") && selected) {
+    const o = selected;
+    gesture = { kind: "rotate", o, center: { x: o.x + o.w / 2, y: o.y + o.h / 2 }, before: snapshot() };
   } else {
     const o = e.button === 0 ? hitObject(e) : null;
+    if (o && e.shiftKey) {
+      select(o, true); // Umschalt+Klick: zur Auswahl hinzufügen oder entfernen
+      return;
+    }
     if (o) {
-      select(o);
-      // Ein Rahmen nimmt alles mit, was ganz in ihm liegt.
-      const group = o.type === "frame" ? doc.objects.filter((p) => p !== o && !p.hidden && inside(p, o)) : [];
-      gesture = { kind: "move", start, items: [o, ...group].map((p) => ({ p, x: p.x, y: p.y })), before: snapshot() };
+      if (!selection.includes(o)) select(o);
+      // Alle ausgewählten Objekte bewegen sich gemeinsam, Rahmen mit ihrem Inhalt.
+      const items = withContents(selection).map((p) => ({ p, x: p.x, y: p.y }));
+      gesture = { kind: "move", start, items, before: snapshot() };
+    } else if (e.button === 0 && e.shiftKey) {
+      // Umschalt+Ziehen auf leerer Fläche: Auswahlrechteck.
+      const box = document.createElement("div");
+      box.className = "marquee";
+      viewport.append(box);
+      const r = viewport.getBoundingClientRect();
+      gesture = { kind: "marquee", start, box, sx: e.clientX - r.left, sy: e.clientY - r.top };
     } else {
       select(null);
       gesture = { kind: "pan", x: e.clientX, y: e.clientY, cx: camera.cx, cy: camera.cy };
@@ -604,6 +740,16 @@ viewport.addEventListener("pointerdown", (e) => {
   viewport.setPointerCapture(e.pointerId);
 });
 
+const ROTATE_SNAP = 15;
+
+function rotationAt(g, p, snap) {
+  // 0° zeigt nach oben, wo der Drehanfasser sitzt.
+  let deg = (Math.atan2(p.y - g.center.y, p.x - g.center.x) * 180) / Math.PI + 90;
+  if (snap) deg = Math.round(deg / ROTATE_SNAP) * ROTATE_SNAP;
+  deg = ((deg % 360) + 360) % 360;
+  return deg === 0 ? 0 : deg;
+}
+
 viewport.addEventListener("pointermove", (e) => {
   if (!gesture) return;
   if (gesture.kind === "pan") {
@@ -612,6 +758,24 @@ viewport.addEventListener("pointermove", (e) => {
     return;
   }
   const p = eventToWorld(e);
+  if (gesture.kind === "rotate") {
+    gesture.o.rot = rotationAt(gesture, p, e.shiftKey);
+    updateEl(gesture.o);
+    return;
+  }
+  if (gesture.kind === "marquee") {
+    const r = viewport.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    Object.assign(gesture.box.style, {
+      left: `${Math.min(x, gesture.sx)}px`,
+      top: `${Math.min(y, gesture.sy)}px`,
+      width: `${Math.abs(x - gesture.sx)}px`,
+      height: `${Math.abs(y - gesture.sy)}px`,
+    });
+    gesture.end = p;
+    return;
+  }
   const dx = p.x - gesture.start.x;
   const dy = p.y - gesture.start.y;
   if (gesture.kind === "move") {
@@ -623,10 +787,14 @@ viewport.addEventListener("pointermove", (e) => {
   } else {
     const o = gesture.o;
     const minSize = 4 / zoom();
-    o.w = Math.max(minSize, gesture.w + dx);
+    // Bei gedrehten Objekten zählt die Bewegung entlang ihrer eigenen Achsen.
+    const a = (-(o.rot ?? 0) * Math.PI) / 180;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a);
+    const ly = dx * Math.sin(a) + dy * Math.cos(a);
+    o.w = Math.max(minSize, gesture.w + lx);
     // Bilder behalten ihr Seitenverhältnis, andere Objekte nur mit gedrückter Umschalttaste.
     const keepAspect = o.type === "image" ? !e.shiftKey : e.shiftKey;
-    o.h = keepAspect ? o.w * (gesture.h / gesture.w) : Math.max(minSize, gesture.h + dy);
+    o.h = keepAspect ? o.w * (gesture.h / gesture.w) : Math.max(minSize, gesture.h + ly);
     updateEl(o);
   }
 });
@@ -636,6 +804,19 @@ const endGesture = (e) => {
   gesture = null;
   viewport.classList.remove("dragging");
   if (g?.before && snapshot() !== g.before) checkpoint(g.before);
+  if (g?.kind === "marquee") {
+    g.box.remove();
+    if (g.end) {
+      const box = {
+        x: Math.min(g.start.x, g.end.x),
+        y: Math.min(g.start.y, g.end.y),
+        w: Math.abs(g.end.x - g.start.x),
+        h: Math.abs(g.end.y - g.start.y),
+      };
+      const hits = doc.objects.filter((o) => !o.hidden && inside(o, box));
+      setSelection([...selection, ...hits.filter((o) => !selection.includes(o))]);
+    }
+  }
   const isClick = g?.kind === "pan" && e?.type === "pointerup" && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 4;
   if (presenting && isClick && g.target) flyToObject(byId.get(g.target.dataset.id));
 };
@@ -750,6 +931,7 @@ async function openFile() {
     currentPath = path;
     undoStack = [];
     redoStack = [];
+    selection = [];
     selected = null;
     pathIndex = 0;
     buildWorld();
@@ -848,6 +1030,11 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       document.activeElement.blur();
     }
+    return;
+  }
+  if (e.ctrlKey && !presenting && ["c", "x", "d", "a"].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    ({ c: copySelection, x: cutSelection, d: duplicateSelection, a: selectAll })[e.key.toLowerCase()]();
     return;
   }
   if (e.ctrlKey && !presenting && ["z", "Z", "y", "Y"].includes(e.key)) {
