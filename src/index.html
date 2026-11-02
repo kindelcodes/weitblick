@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Weitblick</title>
+    <script type="module" src="main.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand">Weitblick</span>
+      <span class="doc-title" id="doc-title"></span>
+      <div class="tools">
+        <button id="btn-open" title="Öffnen (Strg+O)">Öffnen</button>
+        <button id="btn-save" title="Speichern (Strg+S, unter neuem Namen: Strg+Umschalt+S)">Speichern</button>
+        <span class="sep"></span>
+        <button id="btn-add-text" title="Text hinzufügen">T Text</button>
+        <button id="btn-add-frame" title="Rahmen hinzufügen (kommt in den Pfad)">▭ Rahmen</button>
+        <button id="btn-add-rect" title="Rechteck hinzufügen">■ Rechteck</button>
+        <button id="btn-add-ellipse" title="Kreis hinzufügen">● Kreis</button>
+        <span class="sep"></span>
+        <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
+        <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
+        <button id="btn-delete" data-needs="any" title="Löschen (Entf)">Löschen</button>
+      </div>
+    </header>
+
+    <aside class="pathbar">
+      <div class="pathbar-head">Pfad</div>
+      <ol id="path-list"></ol>
+    </aside>
+
+    <main id="viewport" class="viewport">
+      <div id="world" class="world"></div>
+    </main>
+
+    <nav class="navbar">
+      <button id="btn-prev" title="Zurück (←)">‹</button>
+      <button id="btn-next" title="Weiter (→)">›</button>
+      <span class="sep"></span>
+      <button id="btn-home" title="Überblick (Pos1)">⌂</button>
+      <span class="sep"></span>
+      <button id="btn-zoom-out" title="Herauszoomen">−</button>
+      <span id="zoom-label" class="zoom-label">100 %</span>
+      <button id="btn-zoom-in" title="Hineinzoomen">+</button>
+    </nav>
+  </body>
+</html>
