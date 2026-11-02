@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="styles.css" />
     <title>Weitblick</title>
+    <script>
+      window.addEventListener("error", (e) => {
+        const p = document.createElement("pre");
+        p.style.cssText = "position:fixed;z-index:999;top:0;left:0;background:#fff;color:#c00;padding:8px";
+        p.textContent = `${e.message} @ ${e.filename}:${e.lineno}`;
+        document.documentElement.append(p);
+      });
+    </script>
     <script type="module" src="main.js" defer></script>
   </head>
   <body>
@@ -25,6 +33,7 @@
         <span class="sep"></span>
         <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
         <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
+        <button id="btn-add-to-path" data-needs="any" title="Ausgewähltes Objekt als Schritt an den Pfad anhängen">+ Pfad</button>
         <button id="btn-delete" data-needs="any" title="Löschen (Entf)">Löschen</button>
         <span class="sep"></span>
         <button id="btn-present" class="primary" title="Präsentieren (F5, ab aktuellem Schritt: Umschalt+F5)">▶ Präsentieren</button>

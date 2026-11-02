@@ -218,6 +218,18 @@ body.presenting:not(.show-controls) .viewport {
   text-align: center;
 }
 
+#path-list li.dragging {
+  opacity: 0.5;
+}
+
+#path-list li.drop-before {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+#path-list li.drop-after {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
 #path-list .remove {
   margin-left: auto;
   border: none;

@@ -234,11 +234,14 @@ function buildPathList() {
     const li = document.createElement("li");
     li.innerHTML = `<span class="num"></span><span class="label"></span><button class="remove" title="Aus dem Pfad entfernen">×</button>`;
     li.querySelector(".num").textContent = id === doc.path[0] ? "⌂" : i;
-    li.querySelector(".label").textContent = byId.get(id)?.title ?? id;
-    li.addEventListener("click", () => goTo(i));
+    li.querySelector(".label").textContent = stepLabel(byId.get(id)) ?? id;
+    li.addEventListener("click", () => {
+      if (!pathDrag?.moved) goTo(i);
+    });
     const remove = li.querySelector(".remove");
     if (i === 0) remove.remove();
-    else
+    else li.addEventListener("pointerdown", (e) => startPathDrag(e, i));
+    if (i !== 0)
       remove.addEventListener("click", (e) => {
         e.stopPropagation();
         checkpoint();
@@ -249,6 +252,74 @@ function buildPathList() {
     pathList.append(li);
   });
   markActive();
+}
+
+function stepLabel(o) {
+  if (!o) return null;
+  if (o.title) return o.title;
+  if (o.type === "text") return o.text.split("\n")[0].slice(0, 40) || "Text";
+  return { image: "Bild", shape: "Form" }[o.type];
+}
+
+// ---------- Pfad umsortieren per Ziehen ----------
+// Eigene Zeigerlogik statt HTML-Drag-and-drop: Tauri fängt unter Windows
+// Drag-and-drop für Dateien ab, dann kommen die HTML-Ereignisse nicht an.
+
+let pathDrag = null;
+
+function startPathDrag(e, from) {
+  if (e.button !== 0 || e.target.closest(".remove")) return;
+  pathDrag = { from, y: e.clientY, moved: false, to: from, li: e.currentTarget };
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
+
+// Einfügeposition: vor welchem Eintrag landet der gezogene? Nie vor dem Überblick.
+function dropIndex(clientY) {
+  const items = [...pathList.children];
+  for (let k = 1; k < items.length; k++) {
+    const r = items[k].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) return k;
+  }
+  return items.length;
+}
+
+pathList.addEventListener("pointermove", (e) => {
+  if (!pathDrag) return;
+  if (!pathDrag.moved && Math.abs(e.clientY - pathDrag.y) < 5) return;
+  pathDrag.moved = true;
+  pathDrag.li.classList.add("dragging");
+  pathDrag.to = dropIndex(e.clientY);
+  const items = [...pathList.children];
+  items.forEach((li, k) => {
+    li.classList.toggle("drop-before", k === pathDrag.to);
+    li.classList.toggle("drop-after", pathDrag.to === items.length && k === items.length - 1);
+  });
+});
+
+pathList.addEventListener("pointerup", () => {
+  const d = pathDrag;
+  if (!d) return;
+  // Der Klick nach dem Loslassen soll nicht zum Eintrag fliegen; danach zurücksetzen.
+  setTimeout(() => (pathDrag = null));
+  if (!d.moved) return;
+  let to = d.to > d.from ? d.to - 1 : d.to;
+  if (to === d.from) return buildPathList();
+  checkpoint();
+  // Den aktiven Eintrag mitverfolgen, damit die Markierung bei ihm bleibt.
+  const order = doc.path.map((_, k) => k);
+  const [id] = doc.path.splice(d.from, 1);
+  const [k] = order.splice(d.from, 1);
+  doc.path.splice(to, 0, id);
+  order.splice(to, 0, k);
+  pathIndex = order.indexOf(pathIndex);
+  buildPathList();
+});
+
+// Ausgewähltes Objekt als weiteren Schritt in den Pfad aufnehmen (auch mehrmals).
+function addSelectedToPath() {
+  if (!selected) return;
+  checkpoint();
+  addToPath(selected.id);
 }
 
 function markActive() {
@@ -587,7 +658,7 @@ async function openFile() {
 
 const appWindow = tauri?.window?.getCurrentWindow();
 const progressBar = document.getElementById("progress-bar");
-const stepLabel = document.getElementById("step-label");
+const stepCounter = document.getElementById("step-label");
 let controlsTimer = null;
 
 function flyToObject(o) {
@@ -601,7 +672,7 @@ function flyToObject(o) {
 function updateProgress() {
   const last = Math.max(1, doc.path.length - 1);
   progressBar.style.width = `${(pathIndex / last) * 100}%`;
-  stepLabel.textContent = `${pathIndex + 1} / ${doc.path.length}`;
+  stepCounter.textContent = `${pathIndex + 1} / ${doc.path.length}`;
 }
 
 async function setFullscreen(on) {
@@ -701,6 +772,7 @@ on("btn-delete", deleteSelected);
 on("btn-open", openFile);
 on("btn-save", save);
 on("btn-add-image", chooseImages);
+on("btn-add-to-path", addSelectedToPath);
 on("btn-undo", undo);
 on("btn-redo", redo);
 
