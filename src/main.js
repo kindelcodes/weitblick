@@ -1606,6 +1606,7 @@ async function importPptxPath(path) {
     const result = importPptx(entries, title, structuredClone(demo.theme));
     // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
     loadDocument(result.doc, null, result.media);
+    await fitImportedTexts();
     savedSnapshot = null;
     showFileName();
     const notes = result.skipped.length ? `\n\nNicht oder nur vereinfacht übernommen:\n– ${result.skipped.join("\n– ")}` : "";
@@ -1614,6 +1615,24 @@ async function importPptxPath(path) {
     await tauri.dialog.message(String(err?.message ?? err), { title: "Import fehlgeschlagen", kind: "error" });
   } finally {
     document.body.classList.remove("busy");
+  }
+}
+
+// Importierte Texte, die über ihr Feld hinauslaufen (andere Schrift, andere Zeilenhöhe als in PowerPoint),
+// schrittweise verkleinern, bis sie passen. Gemessen wird in Leinwand-Einheiten, unabhängig vom Zoom.
+async function fitImportedTexts() {
+  await document.fonts.ready;
+  for (const o of doc.objects) {
+    if (o.type !== "text" || !o.fit) continue;
+    delete o.fit;
+    const el = elOf(o);
+    if (!el) continue;
+    el.style.overflow = "hidden";
+    for (let i = 0; i < 40 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1); i++) {
+      o.size *= 0.93;
+      updateEl(o, el);
+    }
+    el.style.overflow = "";
   }
 }
 
@@ -2309,12 +2328,105 @@ async function setFullscreen(on) {
   }
 }
 
+// ---------- Bildschirm für die Präsentation ----------
+// Mit mehreren Bildschirmen präsentiert Weitblick wie PowerPoint auf dem anderen (z. B. Beamer).
+// Die Wahl („same“, „other“ oder ein Bildschirmname) wird gemerkt; das Fenster kommt danach zurück.
+
+let screenChoice = "other";
+try {
+  screenChoice = localStorage.getItem("weitblick-screen") ?? "other";
+} catch {
+  // Standard: anderer Bildschirm
+}
+let windowBefore = null;
+
+async function monitors() {
+  try {
+    const all = await tauri.window.availableMonitors();
+    const cur = await tauri.window.currentMonitor();
+    return { all, cur };
+  } catch (err) {
+    window.__screenError = String(err?.message ?? err);
+    return { all: [], cur: null };
+  }
+}
+
+async function moveToPresentationScreen() {
+  const { all, cur } = await monitors();
+  if (all.length < 2 || screenChoice === "same") return;
+  const target = screenChoice === "other" ? all.find((m) => m.name !== cur?.name) : all.find((m) => m.name === screenChoice);
+  if (!target || target.name === cur?.name) return;
+  try {
+    windowBefore = {
+      pos: await appWindow.outerPosition(),
+      // setSize setzt die Innengröße, also auch die Innengröße merken.
+      size: await appWindow.innerSize(),
+      max: await appWindow.isMaximized(),
+    };
+    if (windowBefore.max) await appWindow.unmaximize();
+    await appWindow.setPosition(new tauri.dpi.PhysicalPosition(target.position.x + 40, target.position.y + 40));
+  } catch (err) {
+    window.__screenError = String(err?.message ?? err);
+    windowBefore = null;
+  }
+}
+
+async function restoreWindow() {
+  if (!windowBefore) return;
+  const w = windowBefore;
+  windowBefore = null;
+  try {
+    await appWindow.setPosition(w.pos);
+    await appWindow.setSize(w.size);
+    if (w.max) await appWindow.maximize();
+  } catch {
+    // Fenster bleibt, wo es ist.
+  }
+}
+
+async function showPresentMenu() {
+  const { all, cur } = await monitors();
+  const b = document.getElementById("btn-present-menu").getBoundingClientRect();
+  const pick = (v) => () => {
+    screenChoice = v;
+    try {
+      localStorage.setItem("weitblick-screen", v);
+    } catch {
+      // nur für diese Sitzung
+    }
+  };
+  const mark = (v) => (screenChoice === v ? "✓" : "");
+  const items = [
+    { label: "Von vorn präsentieren", keys: "F5", run: () => startPresentation(false) },
+    { label: "Ab aktuellem Schritt", keys: "Umschalt+F5", run: () => startPresentation(true) },
+    "-",
+    { label: "Auf diesem Bildschirm", keys: mark("same"), run: pick("same") },
+  ];
+  if (all.length > 1) {
+    items.push({ label: "Auf dem anderen Bildschirm", keys: mark("other"), run: pick("other") });
+    all.forEach((m, i) =>
+      items.push({
+        label: `Bildschirm ${i + 1}: ${m.size.width}×${m.size.height}${m.name === cur?.name ? " (dieser)" : ""}`,
+        keys: mark(m.name),
+        run: pick(m.name),
+      }),
+    );
+  } else {
+    items.push({ label: "Kein zweiter Bildschirm erkannt", keys: "", run: () => {} });
+  }
+  buildMenu(items, ctxMenu);
+  ctxMenu.classList.add("open");
+  ctxMenu.style.left = `${Math.max(4, b.right - ctxMenu.offsetWidth)}px`;
+  ctxMenu.style.top = `${b.bottom + 4}px`;
+}
+
 async function startPresentation(fromCurrent) {
   if (presenting) return;
   if (isEditing()) document.activeElement.blur();
   select(null);
   presenting = true;
   document.body.classList.add("presenting");
+  await moveToPresentationScreen();
   await setFullscreen(true);
   // Erst wenn das Fenster seine neue Größe hat, passt der Ausschnitt.
   requestAnimationFrame(() => {
@@ -2329,6 +2441,7 @@ async function stopPresentation() {
   document.body.classList.remove("presenting", "show-controls");
   applyVisibility(pathIndex); // im Editor ist alles sichtbar
   await setFullscreen(false);
+  await restoreWindow();
 }
 
 // Die Steuerleiste erscheint bei Mausbewegung und verschwindet nach zwei Sekunden Ruhe.
@@ -2572,6 +2685,8 @@ on("btn-add-frame", () => addObject("frame"));
 on("btn-new", newDocument);
 document.getElementById("btn-export").addEventListener("pointerdown", (e) => e.stopPropagation());
 on("btn-export", showExportMenu);
+document.getElementById("btn-present-menu").addEventListener("pointerdown", (e) => e.stopPropagation());
+on("btn-present-menu", showPresentMenu);
 on("btn-grid", toggleGrid);
 viewport.classList.toggle("grid-on", gridOn);
 document.getElementById("btn-grid").classList.toggle("on", gridOn);

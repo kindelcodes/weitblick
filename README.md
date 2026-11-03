@@ -62,6 +62,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Schriftart | Formatleiste: Standard-, eingebettete und alle Systemschriften |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
+| Zweiter Bildschirm / Beamer | Mit mehreren Bildschirmen läuft die Präsentation auf dem anderen; im Menü ▾ neben „Präsentieren“ lässt sich der Bildschirm wählen |
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
 | Präsentation beenden | Esc |
 

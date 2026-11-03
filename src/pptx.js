@@ -556,9 +556,11 @@ function readText(body, theme, defaults) {
   const firstRun = desc(body, "r")[0];
   const rPr = kid(firstRun, "rPr") ?? desc(body, "endParaRPr")[0] ?? desc(body, "defRPr")[0];
   const algn = desc(body, "pPr")[0]?.getAttribute("algn");
+  // „Text bei Überlauf verkleinern“: PowerPoint speichert den Faktor in normAutofit@fontScale.
+  const scale = num(desc(body, "normAutofit")[0]?.getAttribute("fontScale"), 100000) / 100000;
   return {
     text,
-    pt: rPr?.getAttribute("sz") ? num(rPr.getAttribute("sz")) / 100 : defaults.pt,
+    pt: (rPr?.getAttribute("sz") ? num(rPr.getAttribute("sz")) / 100 : defaults.pt) * scale,
     bold: rPr?.getAttribute("b") === "1" || (rPr?.getAttribute("b") == null && defaults.bold),
     italic: rPr?.getAttribute("i") === "1",
     color: colorOf(kid(rPr, "solidFill"), theme) ?? defaults.color,
@@ -695,8 +697,16 @@ export function importPptx(entries, title, baseTheme) {
       });
       if (t) {
         if (isTitle) frame.title = t.text.split("\n")[0].slice(0, 60);
+        // Innenabstände des Textfelds (PowerPoint-Standard 0,1"/0,05") abziehen.
+        const bodyPr = kid(kid(el, "txBody"), "bodyPr");
+        const li = num(bodyPr?.getAttribute("lIns"), 91440);
+        const ri = num(bodyPr?.getAttribute("rIns"), 91440);
+        const ti = num(bodyPr?.getAttribute("tIns"), 45720);
+        const bi = num(bodyPr?.getAttribute("bIns"), 45720);
+        const inner = { ...r, x: r.x + li, y: r.y + ti, w: Math.max(r.w - li - ri, r.w * 0.5), h: Math.max(r.h - ti - bi, r.h * 0.5) };
         objects.push(
-          place(r, {
+          place(inner, {
+            fit: true,
             id: id("t"),
             type: "text",
             text: t.text,
@@ -733,8 +743,25 @@ export function importPptx(entries, title, baseTheme) {
       const x = readXfrm(kid(el, "xfrm"));
       const tbl = desc(el, "tbl")[0];
       if (!x) return;
+      // SmartArt: PowerPoint legt eine fertig gezeichnete Fassung (diagrams/drawingN.xml) bei.
+      // Deren Formen liegen relativ zum Rahmen des Grafikobjekts und lassen sich wie normale Formen lesen.
+      const dm = desc(el, "relIds")[0]?.getAttributeNS(NS.r, "dm");
+      if (!tbl && dm && rels.get(dm)) {
+        const data = parseXml(files.get(rels.get(dm).target)?.text ?? "<x/>").documentElement;
+        const drawingRel = desc(data, "dataModelExt")[0]?.getAttribute("relId");
+        const drawingPart = drawingRel && rels.get(drawingRel)?.target;
+        const drawing = drawingPart && files.get(drawingPart)?.text;
+        if (drawing) {
+          const dtree = desc(parseXml(drawing).documentElement, "spTree")[0];
+          if (dtree) {
+            walk(dtree, (r) => tf({ ...r, x: x.x + r.x, y: x.y + r.y }));
+            return;
+          }
+        }
+        skipped.add("SmartArt ohne gespeicherte Zeichnung (als Platzhalter)");
+      }
       if (!tbl) {
-        skipped.add("Diagramme/SmartArt (als Platzhalter)");
+        if (!dm) skipped.add("Diagramme aus PowerPoint (als Platzhalter)");
         objects.push(place(tf(x), { id: id("t"), type: "text", text: "[Diagramm aus PowerPoint]", size: 18 * EMU_PER_PT * k, color: dark, align: "center" }));
         return;
       }
@@ -752,7 +779,7 @@ export function importPptx(entries, title, baseTheme) {
           const t = readText(kid(tc, "txBody"), theme, { pt: 14, bold: false, color: dark, major: theme.major, minor: theme.minor });
           if (t) {
             const pad = cw * 0.05;
-            objects.push(place({ ...cell, x: cell.x + pad, w: cell.w - 2 * pad }, { id: id("t"), type: "text", text: t.text, size: t.pt * EMU_PER_PT * k, color: t.color, align: t.align, ...(t.bold ? { weight: 700 } : {}) }));
+            objects.push(place({ ...cell, x: cell.x + pad, w: cell.w - 2 * pad }, { id: id("t"), type: "text", fit: true, text: t.text, size: t.pt * EMU_PER_PT * k, color: t.color, align: t.align, ...(t.bold ? { weight: 700 } : {}) }));
           }
           tx += cw;
         });
