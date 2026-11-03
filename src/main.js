@@ -2,6 +2,7 @@ import { Camera, fitRect } from "./camera.js";
 import { demo } from "./demo.js";
 import { SHAPES, shapeSvg } from "./shapes.js";
 import { DIAGRAMS } from "./diagrams.js";
+import { THEMES, ROLES } from "./themes.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
@@ -32,8 +33,9 @@ let undoStack = [];
 let redoStack = [];
 let savedSnapshot = null;
 
+// Stil (Farben, Schriften) gehört mit zum Stand, damit auch ein Stilwechsel rückgängig gemacht werden kann.
 function snapshot() {
-  return JSON.stringify({ objects: doc.objects, path: doc.path });
+  return JSON.stringify({ objects: doc.objects, path: doc.path, theme: doc.theme, fonts: doc.fonts });
 }
 
 function checkpoint(before = snapshot()) {
@@ -47,6 +49,9 @@ function restore(snap) {
   const s = JSON.parse(snap);
   doc.objects = s.objects;
   doc.path = s.path;
+  if (s.theme) doc.theme = s.theme;
+  if (s.fonts) doc.fonts = s.fonts;
+  registerDocFonts();
   selection = [];
   selected = null;
   pathIndex = Math.min(pathIndex, doc.path.length - 1);
@@ -192,7 +197,7 @@ function updateEl(o, el = elOf(o)) {
       textAlign: o.align || "left",
       fontWeight: o.weight || 400,
       fontStyle: o.italic ? "italic" : "normal",
-      fontFamily: fontStack(o.font),
+      fontFamily: fontStack(textFont(o)),
     });
   }
   el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
@@ -496,8 +501,9 @@ function updateToolbar() {
   if (!selected) return;
   if (colored) colorInput.value = toHex(selected[colorKey(selected)] ?? defaultColor(selected));
   if (isText) {
-    ensureFontOption(selected.font ?? "sans");
-    fontSelect.value = selected.font ?? "sans";
+    ensureFontOption(textFont(selected));
+    fontSelect.value = textFont(selected);
+    roleSelect.value = selected.role ?? "body";
     document.getElementById("btn-bold").classList.toggle("on", (selected.weight ?? 400) >= 600);
     document.getElementById("btn-italic").classList.toggle("on", !!selected.italic);
     document.getElementById("btn-align").textContent = ALIGN_ICONS[selected.align ?? "left"];
@@ -510,6 +516,8 @@ const FONTS = {
   sans: '"Segoe UI", "Noto Sans", "DejaVu Sans", sans-serif',
   serif: 'Georgia, "Noto Serif", "DejaVu Serif", serif',
   mono: 'Consolas, "DejaVu Sans Mono", monospace',
+  // Comfortaa Bold, fest in der App (assets/), deshalb auch offline ohne Einbetten verfügbar.
+  "Weitblick Brand": '"Weitblick Brand", "Segoe UI", sans-serif',
 };
 const ALIGNS = ["left", "center", "right"];
 const ALIGN_ICONS = { left: "⇤", center: "⇔", right: "⇥" };
@@ -521,6 +529,11 @@ const fontSelect = document.getElementById("sel-font");
 // Welches Feld eines Objekts die Farbe trägt.
 function colorKey(o) {
   return { text: "color", icon: "color", shape: "fill", frame: "fill" }[o?.type] ?? null;
+}
+
+// Eine eigens gewählte Schrift gewinnt, sonst gilt die Schrift des Stils für die Rolle des Textes.
+function textFont(o) {
+  return o.font ?? doc.theme.fonts?.[o.role ?? "body"] ?? "sans";
 }
 
 // Feste Namen (sans/serif/mono) oder der Name einer System- bzw. Google-Schrift.
@@ -571,7 +584,16 @@ colorInput.addEventListener("change", () => {
   colorBefore = null;
 });
 
-fontSelect.addEventListener("change", () => format((o) => (o.font = fontSelect.value), isText));
+fontSelect.addEventListener("change", () => addGoogleFont(fontSelect.value));
+
+const roleSelect = document.getElementById("sel-role");
+// Rolle wechseln: der Text folgt dann der Stilschrift dieser Rolle (eigene Schriftwahl wird aufgehoben).
+roleSelect.addEventListener("change", () =>
+  format((o) => {
+    o.role = roleSelect.value;
+    delete o.font;
+  }, isText),
+);
 
 // Der neue Zustand richtet sich nach dem zuletzt gewählten Text und gilt dann für alle.
 function toggleBold() {
@@ -1109,18 +1131,20 @@ function registerDocFonts() {
   fillFontSelect();
 }
 
-async function addGoogleFont(family, status) {
-  family = family.trim();
-  if (!family) return;
-  if (doc.fonts.some((f) => f.family.toLowerCase() === family.toLowerCase())) {
-    applyFont(doc.fonts.find((f) => f.family.toLowerCase() === family.toLowerCase()).family);
-    return;
-  }
+// Braucht eine Schrift einen Download? Standard- und Systemschriften nicht, eingebettete auch nicht.
+function needsDownload(family) {
+  if (!family || FONTS[family]) return false;
+  if ((systemFonts ?? []).includes(family)) return false;
+  return !doc.fonts.some((f) => f.family.toLowerCase() === family.toLowerCase());
+}
+
+// Lädt eine Google-Schrift und bettet sie ein (ohne eigenen Rückgängig-Schritt). Liefert true bei Erfolg.
+async function embedGoogleFont(family, status = fontStatus) {
+  if (!needsDownload(family)) return true;
   status.textContent = `Lade „${family}“ …`;
   try {
     const faces = await tauri.core.invoke("google_font", { family });
     const slug = family.toLowerCase().replace(/\s+/g, "-");
-    checkpoint();
     doc.fonts.push({
       family,
       faces: faces.map((f, i) => {
@@ -1131,10 +1155,19 @@ async function addGoogleFont(family, status) {
     });
     registerDocFonts();
     status.textContent = `„${family}“ ist in dieser Präsentation eingebettet.`;
-    applyFont(family);
+    return true;
   } catch (err) {
-    status.textContent = String(err);
+    status.textContent = String(err?.message ?? err);
+    return false;
   }
+}
+
+async function addGoogleFont(family, status = fontStatus) {
+  family = family.trim();
+  if (!family) return;
+  const known = doc.fonts.find((f) => f.family.toLowerCase() === family.toLowerCase());
+  if (known) return applyFont(known.family);
+  if (await embedGoogleFont(family, status)) applyFont(family);
 }
 
 // Schrift auf die ausgewählten Texte anwenden, falls welche ausgewählt sind.
@@ -1142,23 +1175,34 @@ function applyFont(family) {
   format((o) => (o.font = family), isText);
 }
 
-function fillFontSelect() {
-  const groups = [
-    ["Standard", [["sans", "Serifenlos"], ["serif", "Serif"], ["mono", "Schreibmaschine"]]],
-    ["In dieser Präsentation", (doc.fonts ?? []).map((f) => [f.family, f.family])],
+function fontGroups() {
+  const embedded = (doc.fonts ?? []).map((f) => f.family);
+  return [
+    ["Standard", [["sans", "Serifenlos"], ["serif", "Serif"], ["mono", "Schreibmaschine"], ["Weitblick Brand", "Weitblick (Comfortaa)"]]],
+    ["In dieser Präsentation", embedded.map((f) => [f, f])],
+    ["Google (wird beim Wählen geladen)", GOOGLE_FONTS.filter((f) => !embedded.includes(f)).map((f) => [f, f])],
     ["Systemschriften", (systemFonts ?? []).map((f) => [f, f])],
   ];
-  fontSelect.replaceChildren(
-    ...groups
-      .filter(([, items]) => items.length)
-      .map(([title, items]) => {
-        const g = document.createElement("optgroup");
-        g.label = title;
-        for (const [value, text] of items) g.append(new Option(text, value));
-        return g;
-      }),
-  );
-  if (selected?.type === "text") fontSelect.value = selected.font ?? "sans";
+}
+
+// Alle Schriftauswahlen (Formatleiste und Stil) mit denselben Gruppen füllen.
+function fillFontSelect() {
+  for (const sel of document.querySelectorAll("select.font-select")) {
+    const value = sel.value;
+    sel.replaceChildren(
+      ...fontGroups()
+        .filter(([, items]) => items.length)
+        .map(([title, items]) => {
+          const g = document.createElement("optgroup");
+          g.label = title;
+          for (const [v, text] of items) g.append(new Option(text, v));
+          return g;
+        }),
+    );
+    sel.value = value;
+  }
+  if (selected?.type === "text") fontSelect.value = textFont(selected);
+  updateStylePanel();
 }
 
 // Eine Schrift, die die Liste nicht kennt (z. B. aus einer Datei von einem anderen Rechner), trotzdem anzeigen.
@@ -1179,6 +1223,93 @@ async function loadSystemFonts() {
 // ---------- Seitenleiste rechts: Formen, Symbole, Diagramme, Schriften ----------
 
 const sidebar = document.getElementById("insertbar");
+const fontStatus = sidebar.querySelector(".font-status");
+
+// ---------- Stil: Farbpaletten und Schriftkombinationen ----------
+
+const THEME_COLORS = ["background", "text", "accent", "accent2"];
+
+// Neuen Stil übernehmen: Objekte in den alten Stilfarben bekommen die neuen,
+// Texte folgen wieder der Stilschrift ihrer Rolle. Ein Rückgängig-Schritt.
+async function applyTheme(next) {
+  const old = doc.theme;
+  checkpoint();
+  const swap = new Map(THEME_COLORS.filter((k) => old[k]).map((k) => [old[k].toLowerCase(), next[k]]));
+  for (const o of doc.objects) {
+    for (const key of ["color", "fill"]) {
+      const c = o[key]?.toLowerCase?.();
+      if (c && swap.has(c)) o[key] = swap.get(c);
+    }
+    if (o.type === "text") delete o.font;
+  }
+  doc.theme = { ...structuredClone(next), id: next.id };
+  buildWorld();
+  updateToolbar();
+  updateStylePanel();
+  // Schriften nachladen; ohne Internet bleibt die Ersatzschrift, bis man es erneut versucht.
+  for (const f of new Set(Object.values(next.fonts))) await embedGoogleFont(f, styleStatus);
+  buildWorld();
+}
+
+// Eine einzelne Farbe oder Schrift des Stils ändern (eigene Anpassung).
+async function setThemeValue(key, value, isFont = false) {
+  const old = doc.theme;
+  if (isFont) {
+    if (!(await embedGoogleFont(value, styleStatus))) return;
+    checkpoint();
+    doc.theme = { ...old, id: "custom", fonts: { ...old.fonts, [key]: value } };
+  } else {
+    await applyTheme({ ...old, id: "custom", [key]: value });
+    return;
+  }
+  buildWorld();
+  updateStylePanel();
+}
+
+const styleStatus = sidebar.querySelector(".style-status");
+
+function updateStylePanel() {
+  const t = doc.theme;
+  sidebar.querySelectorAll(".theme-card").forEach((c) => c.classList.toggle("on", c.dataset.theme === t.id));
+  for (const k of THEME_COLORS) {
+    const inp = sidebar.querySelector(`[data-theme-color="${k}"]`);
+    if (inp) inp.value = toHex(t[k] ?? "#888888");
+  }
+  for (const [role] of ROLES) {
+    const sel = sidebar.querySelector(`[data-theme-font="${role}"]`);
+    if (!sel) continue;
+    const v = t.fonts?.[role] ?? "sans";
+    if (![...sel.options].some((o) => o.value === v)) sel.append(new Option(v, v));
+    sel.value = v;
+  }
+}
+
+function buildStylePanel() {
+  const panel = sidebar.querySelector('[data-panel="style"]');
+  const cards = panel.querySelector(".theme-cards");
+  for (const t of THEMES) {
+    const b = document.createElement("button");
+    b.className = "theme-card";
+    b.dataset.theme = t.id;
+    b.style.background = t.background;
+    b.style.color = t.text;
+    b.innerHTML = `<span class="tc-title"></span><span class="tc-fonts"></span><span class="tc-bar"><i></i><i></i></span>`;
+    b.querySelector(".tc-title").textContent = t.name;
+    b.querySelector(".tc-fonts").textContent = `${t.fonts.title} · ${t.fonts.body}`;
+    const [a, a2] = b.querySelectorAll(".tc-bar i");
+    a.style.background = t.accent;
+    a2.style.background = t.accent2;
+    b.addEventListener("click", () => applyTheme(t));
+    cards.append(b);
+  }
+  for (const inp of panel.querySelectorAll("[data-theme-color]")) {
+    inp.addEventListener("change", () => setThemeValue(inp.dataset.themeColor, inp.value));
+  }
+  for (const sel of panel.querySelectorAll("[data-theme-font]")) {
+    sel.addEventListener("change", () => setThemeValue(sel.dataset.themeFont, sel.value, true));
+  }
+  updateStylePanel();
+}
 
 function showTab(tab) {
   sidebar.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
@@ -1243,8 +1374,9 @@ function buildSidebar() {
     if (e.key === "Enter") addGoogleFont(custom.value, status);
   });
 
+  buildStylePanel();
   sidebar.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-  showTab("shapes");
+  showTab("style");
 }
 
 function toggleSidebar() {

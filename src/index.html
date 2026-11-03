@@ -17,7 +17,14 @@
   </head>
   <body>
     <header class="topbar">
-      <span class="brand">Weitblick</span>
+      <span class="brand" aria-label="Weitblick">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="5" width="18" height="12" rx="1.5" fill="none" stroke="#e2efed" stroke-width="2.2" />
+          <rect x="17" y="20" width="9" height="6" rx="1" fill="none" stroke="#e2efed" stroke-width="1.6" />
+          <circle cx="21" cy="17" r="6.5" fill="#f28c38" />
+        </svg>
+        <span><span class="weit">weit</span><span class="blick">blick</span></span>
+      </span>
       <span class="doc-title" id="doc-title"></span>
       <div class="tools">
         <button id="btn-new" title="Neue Präsentation (Strg+N)">Neu</button>
@@ -50,11 +57,12 @@
       <div id="formatbar" class="formatbar">
         <label class="color" title="Farbe"><input type="color" id="inp-color" data-needs="color" /></label>
         <span class="sep"></span>
-        <select id="sel-font" data-needs="text" title="Schriftart">
-          <option value="sans">Serifenlos</option>
-          <option value="serif">Serif</option>
-          <option value="mono">Schreibmaschine</option>
+        <select id="sel-role" data-needs="text" title="Rolle: bestimmt die Stilschrift">
+          <option value="title">Titel</option>
+          <option value="subtitle">Untertitel</option>
+          <option value="body">Text</option>
         </select>
+        <select id="sel-font" class="font-select" data-needs="text" title="Schriftart"></select>
         <button id="btn-bold" data-needs="text" title="Fett (Strg+B)"><b>B</b></button>
         <button id="btn-italic" data-needs="text" title="Kursiv (Strg+I)"><i>I</i></button>
         <button id="btn-align" data-needs="text" title="Ausrichtung wechseln">⇤</button>
@@ -74,10 +82,26 @@
 
     <aside id="insertbar" class="insertbar">
       <div class="tabs">
+        <button data-tab="style">Stil</button>
         <button data-tab="shapes">Formen</button>
         <button data-tab="icons">Symbole</button>
         <button data-tab="diagrams">Diagramme</button>
         <button data-tab="fonts">Schriften</button>
+      </div>
+      <div data-panel="style">
+        <p class="note">Ein Stil setzt Hintergrund, Farben und Schriften für Titel, Untertitel und Text. Rückgängig mit Strg+Z.</p>
+        <div class="theme-cards"></div>
+        <h4>Eigene Anpassung</h4>
+        <div class="theme-colors">
+          <label>Hintergrund <input type="color" data-theme-color="background" /></label>
+          <label>Text <input type="color" data-theme-color="text" /></label>
+          <label>Akzent <input type="color" data-theme-color="accent" /></label>
+          <label>Akzent 2 <input type="color" data-theme-color="accent2" /></label>
+        </div>
+        <label class="theme-font">Titel <select class="font-select" data-theme-font="title"></select></label>
+        <label class="theme-font">Untertitel <select class="font-select" data-theme-font="subtitle"></select></label>
+        <label class="theme-font">Text <select class="font-select" data-theme-font="body"></select></label>
+        <div class="style-status note"></div>
       </div>
       <div data-panel="shapes" class="tile-grid"></div>
       <div data-panel="icons">
