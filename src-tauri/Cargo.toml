@@ -1,6 +1,6 @@
 [package]
 name = "weitblick"
-version = "0.5.0"
+version = "0.5.1"
 description = "Weitblick – Präsentationen auf einer zoombaren Leinwand"
 authors = ["Nils Kindel"]
 license = "MIT"
