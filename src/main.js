@@ -1524,6 +1524,35 @@ function insertDiagram(id) {
     items = items.map((o) => ({ ...o, group: g }));
   }
   insertObjects(items);
+  frameAndAddToPath(selection, d.label);
+}
+
+// Um frisch eingefügte Inhalte einen Rahmen im Seitenverhältnis der Präsentation legen und ihn
+// als Pfadschritt anhängen. Gehört zum selben Rückgängig-Schritt wie das Einfügen.
+function frameAndAddToPath(items, title) {
+  if (!items.length) return;
+  const b = { ...selectionBox() };
+  const pad = Math.max(b.w, b.h) * 0.08;
+  let w = b.w + 2 * pad;
+  let h = b.h + 2 * pad;
+  const ratio = aspectRatio();
+  if (w / h < ratio) w = h * ratio;
+  else h = w / ratio;
+  const f = {
+    id: newId("f"),
+    type: "frame",
+    x: b.x + b.w / 2 - w / 2,
+    y: b.y + b.h / 2 - h / 2,
+    w,
+    h,
+    title,
+  };
+  for (const o of items) o.frame = f.id;
+  // Rahmen hinter alles andere, damit der Inhalt klickbar bleibt.
+  doc.objects.splice(1, 0, f);
+  buildWorld();
+  addToPath(f.id);
+  setSelection(items);
 }
 
 // ---------- Schriften ----------
