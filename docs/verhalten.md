@@ -40,6 +40,33 @@ Er ergibt von selbst nahe Ziele direkt und ferne im Bogen. Die Dauer liegt zwisc
 - Untere Leiste: Verschieben/Auswählen, vor/zurück, Überblick, Zoom −/+ mit Prozentanzeige. Dazu Sprechernotizen.
 - Ein Klick auf einen Pfadschritt startet auch im Editor die Kamerafahrt.
 
+## Ergänzung: Seitenleisten und Menüs (zweite Beobachtung)
+
+- **Stil/Text:** Benannte Textstile mit je einer Schrift plus fett/kursiv für Titel, Untertitel und Textkörper,
+  dazu ein Hinweis auf ein eigenes Farbschema. Gespeichert wird der Stil unter einem Namen.
+- **Hintergrund:** Hintergrundfarbe, Hintergrundbild (eigenes oder aus einer Bilddatenbank), Bildanpassung
+  (Füllen), **Hintergrund-Parallaxe** (das Hintergrundbild bewegt sich langsamer als die Leinwand) und das
+  Seitenverhältnis der Präsentation (16:9).
+- **Formen** sind in Gruppen sortiert: Einfach (u. a. Halbkreis, rechtwinkliges Dreieck, Parallelogramm),
+  Diagramme (Flussdiagramm-Formen wie Zylinder, Dokument, Ordner, Puzzleteil), Pfeile (links, rechts, doppelt,
+  Fahne), Akzente (Stern, Funkeln, Zacken, Tropfen, Sprechblasen, Wolke, Herz, Plus, Zahnrad) und
+  Linien zeichnen (Linie, Pfeillinie).
+- **Inhaltsblöcke** als Katalog mit Suche: Tabelle, Zeitstrahl, Ziel, Gewinne & Verluste, Liste,
+  Datenvisualisierung (z. B. Venn), Karte, Prozess, Plan (Baum), Team, Information. Die Karten-Kategorie hat
+  eigene Varianten (Welt- und Regionskarten mit Markierungen).
+- Ein ausgewählter Block zeigt eine kleine Leiste mit wenigen Aktionen (Inhalt anordnen, Animation, Ersetzen).
+- Die Pfadliste zeigt **Vorschaubilder** der Schritte statt nur Namen.
+
+### Abgleich mit Weitblick (Stand dieser Beobachtung)
+
+| Bereich | Weitblick hat | Fehlt noch |
+|---|---|---|
+| Stil | 8 Paletten, Schrift je Rolle, eigene Farben | fett/kursiv je Rolle, eigene Stile speichern |
+| Hintergrund | Farbe über den Stil | Hintergrundbild, Parallaxe, Seitenverhältnis |
+| Formen | 13 Formen in einer Gruppe | Gruppen, Flussdiagramm-Formen, Sprechblase, Wolke, Herz, Linien mit Pfeilspitzen |
+| Inhaltsblöcke | Prozess, Kreislauf, Zeitstrahl, Pyramide, Mindmap, Vergleich, Kacheln, Aufzählung | Tabelle, Ziel, Venn/Diagramme, Karte, Baum/Organigramm, Team |
+| Pfadliste | Namen, Animationsschritte | Vorschaubilder |
+
 ## Funktionsliste
 
 **Muss:** Leinwand mit Zoom und Verschieben · Text, Bild, Formen · verschachtelte Rahmen · Pfad mit Seitenleiste ·
