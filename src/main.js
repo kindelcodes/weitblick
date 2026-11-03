@@ -636,10 +636,37 @@ function addToPath(id) {
 // ---------- Auswahl und Bearbeiten ----------
 
 // Mit additive (Umschalt) wird ein Objekt zur Auswahl hinzugefügt oder wieder entfernt.
+// Gehört es zu einer Gruppe, gilt das für die ganze Gruppe.
 function select(o, additive = false) {
-  if (!o) setSelection([]);
-  else if (!additive) setSelection([o]);
-  else setSelection(selection.includes(o) ? selection.filter((p) => p !== o) : [...selection, o]);
+  if (!o) return setSelection([]);
+  const group = groupOf(o);
+  if (!additive) setSelection(group);
+  else if (selection.includes(o)) setSelection(selection.filter((p) => !group.includes(p)));
+  else setSelection([...selection, ...group.filter((p) => !selection.includes(p))]);
+}
+
+// ---------- Gruppen ----------
+// Objekte mit gleichem „group“ werden gemeinsam ausgewählt, bewegt, kopiert und gelöscht.
+
+function groupOf(o) {
+  return o.group ? doc.objects.filter((p) => p.group === o.group) : [o];
+}
+
+function groupSelection() {
+  const items = selection.filter((o) => !o.hidden);
+  if (items.length < 2) return;
+  checkpoint();
+  const id = `g-${Date.now().toString(36)}`;
+  for (const o of items) o.group = id;
+  setSelection(items);
+}
+
+function ungroupSelection() {
+  const items = selection.filter((o) => o.group);
+  if (!items.length) return;
+  checkpoint();
+  for (const o of items) delete o.group;
+  setSelection(items);
 }
 
 function setSelection(list) {
@@ -1050,6 +1077,9 @@ function pasteObjects(source = clipboard, at = null) {
   });
   // Feste Rahmenzugehörigkeit auf die kopierten Rahmen umbiegen; ohne kopierten Rahmen löst sich die Kopie.
   for (const c of copies) if (c.frame) c.frame = ids.get(c.frame) ?? null;
+  // Kopierte Gruppen bekommen neue Gruppen-ids, damit sie nicht mit dem Original verbunden sind.
+  const groups = new Map();
+  for (const c of copies) if (c.group) c.group = groups.get(c.group) ?? groups.set(c.group, `g-${newId("x")}`).get(c.group);
   // Rahmen hinter alles andere, der Rest obendrauf; neue Rahmen kommen auch in den Pfad.
   const frames = copies.filter((c) => c.type === "frame");
   doc.objects.splice(1, 0, ...frames);
@@ -1956,6 +1986,8 @@ function objectMenu(at) {
         { label: "Ganz nach hinten", keys: "Strg+Umschalt+↓", run: () => reorder("back") },
       ],
     },
+    selection.length > 1 && { label: "Gruppieren", keys: "Strg+G", run: groupSelection },
+    selection.some((o) => o.group) && { label: "Gruppierung aufheben", keys: "Strg+Umschalt+G", run: ungroupSelection },
     frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
     selection.some((o) => o.type !== "frame" && inAnyFrame(o)) && { label: "Aus dem Rahmen lösen", run: removeFromFrame },
     one?.type === "image" && { label: "Als Hintergrund verwenden", run: imageToBackground },
@@ -2071,6 +2103,12 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     const up = e.key === "ArrowUp";
     reorder(e.shiftKey ? (up ? "front" : "back") : up ? "forward" : "backward");
+    return;
+  }
+  if (e.ctrlKey && !presenting && e.key.toLowerCase() === "g") {
+    e.preventDefault();
+    if (e.shiftKey) ungroupSelection();
+    else groupSelection();
     return;
   }
   if (e.ctrlKey && !presenting && ["c", "x", "d", "a"].includes(e.key.toLowerCase())) {

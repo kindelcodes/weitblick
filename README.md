@@ -34,6 +34,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Bild aus der Zwischenablage | Strg+V (z. B. nach einem Bildschirmfoto) |
 | Drehen | runder Anfasser über dem Objekt, Umschalt rastet in 15°-Schritten ein |
 | Rechtsklick | auf ein Objekt: Kopieren, Anordnen, Rahmen, Pfad, Animation, Löschen; auf die freie Leinwand: Einfügen, Text/Rahmen/Form hier, Alles auswählen, Stil |
+| Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe |
 | Ebenen | Formatleiste ⤒ ↑ ↓ ⤓ oder Strg+↑/↓ (eine Ebene), Strg+Umschalt+↑/↓ (ganz nach vorn/hinten) |
 | Zum Rahmen hinzufügen / lösen | Rahmen und Objekte gemeinsam auswählen → „▣+ Rahmen“ (der Rahmen wächst mit); Objekt auswählen → „▣− Rahmen“. Beim gewählten Rahmen ist sein Inhalt gestrichelt markiert |
 | Ecken abrunden | Regler ◜ in der Formatleiste (Rechtecke, Vielecke, Pfeile, Rahmen, Bilder) |
