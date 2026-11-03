@@ -33,6 +33,9 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Kopieren / Ausschneiden / Einfügen / Duplizieren | Strg+C / Strg+X / Strg+V / Strg+D; Rahmen nehmen ihren Inhalt mit |
 | Bild aus der Zwischenablage | Strg+V (z. B. nach einem Bildschirmfoto) |
 | Drehen | runder Anfasser über dem Objekt, Umschalt rastet in 15°-Schritten ein |
+| Ebenen | Formatleiste ⤒ ↑ ↓ ⤓ oder Strg+↑/↓ (eine Ebene), Strg+Umschalt+↑/↓ (ganz nach vorn/hinten) |
+| Zum Rahmen hinzufügen / lösen | Rahmen und Objekte gemeinsam auswählen → „▣+ Rahmen“ (der Rahmen wächst mit); Objekt auswählen → „▣− Rahmen“. Beim gewählten Rahmen ist sein Inhalt gestrichelt markiert |
+| Ecken abrunden | Regler ◜ in der Formatleiste (Rechtecke, Vielecke, Pfeile, Rahmen, Bilder) |
 | Größe ändern | Anfasser unten rechts, Umschalt hält das Seitenverhältnis |
 | Text bearbeiten | Doppelklick auf den Text, Esc beendet |
 | Löschen | Entf |

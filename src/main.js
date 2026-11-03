@@ -186,7 +186,7 @@ function makeEl(o) {
 function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
   if (o.type === "shape") {
-    const svg = shapeSvg(o.shape, o.fill, o.points);
+    const svg = shapeSvg(o.shape, o.fill, o.points, hasCorners(o) ? cornerRadius(o) : 0);
     el.style.background = svg ? "" : o.fill;
     el.querySelector(".shape-svg")?.remove();
     if (svg) el.insertAdjacentHTML("afterbegin", svg);
@@ -211,6 +211,12 @@ function updateEl(o, el = elOf(o)) {
   }
   el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
   el.style.setProperty("--alpha", o.opacity ?? 1);
+  // Rechteckige Objekte runden per CSS ab (SVG-Formen erledigt shapeSvg).
+  const cssCorners = o.type === "frame" || o.type === "image" || (o.type === "shape" && ["rect", "rounded"].includes(o.shape));
+  if (cssCorners) {
+    const r = cornerRadius(o);
+    el.style.borderRadius = r ? `${(r / 100) * Math.min(o.w, o.h)}px` : "";
+  }
   el.classList.toggle("selected", selection.includes(o));
   el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove());
   // Anfasser nur bei genau einem ausgewählten Objekt.
@@ -605,6 +611,7 @@ function setSelection(list) {
   selection = list;
   selected = list.at(-1) ?? null;
   for (const p of new Set([...prev, ...list])) if (byId.has(p.id)) updateEl(p);
+  markFrameMembers();
   updateToolbar();
 }
 
@@ -612,16 +619,126 @@ function selectAll() {
   setSelection(doc.objects.filter((o) => !o.hidden));
 }
 
-// Rahmen nehmen alles mit, was ganz in ihnen liegt (beim Verschieben und Kopieren).
+// Was gehört zu einem Rahmen? Ein Objekt mit Eintrag „frame“ gehört fest zu diesem Rahmen
+// (null: ausdrücklich zu keinem); ohne Eintrag zählt, ob es ganz im Rahmen liegt.
+function membersOf(f) {
+  return doc.objects.filter((p) => p !== f && !p.hidden && (p.frame !== undefined ? p.frame === f.id : inside(p, f)));
+}
+
+// Rahmen nehmen ihren Inhalt mit (beim Verschieben und Kopieren).
 function withContents(list) {
   const result = new Set(list);
-  for (const f of list) {
-    if (f.type !== "frame") continue;
-    for (const p of doc.objects) if (p !== f && !p.hidden && inside(p, f)) result.add(p);
-  }
+  for (const f of list) if (f.type === "frame") membersOf(f).forEach((p) => result.add(p));
   // In der Reihenfolge der Leinwand, damit Ebenen beim Kopieren erhalten bleiben.
   return doc.objects.filter((o) => result.has(o));
 }
+
+// Bei einem ausgewählten Rahmen ist sein Inhalt gestrichelt markiert.
+function markFrameMembers() {
+  world.querySelectorAll(".frame-member").forEach((e) => e.classList.remove("frame-member"));
+  if (selection.length !== 1 || selected?.type !== "frame") return;
+  for (const p of membersOf(selected)) elOf(p)?.classList.add("frame-member");
+}
+
+// ---------- Ebenen: nach vorn und nach hinten ----------
+// Die Reihenfolge in doc.objects ist die Zeichenreihenfolge; der unsichtbare Überblick bleibt immer ganz hinten.
+
+function reorder(mode) {
+  const sel = new Set(selection.filter((o) => !o.hidden));
+  if (!sel.size) return;
+  checkpoint();
+  const fixed = doc.objects.filter((o) => o.hidden);
+  let rest = doc.objects.filter((o) => !o.hidden);
+  if (mode === "front" || mode === "back") {
+    const moved = rest.filter((o) => sel.has(o));
+    const others = rest.filter((o) => !sel.has(o));
+    rest = mode === "front" ? [...others, ...moved] : [...moved, ...others];
+  } else {
+    // Einen Schritt: an jedem nicht gewählten Nachbarn vorbei, der in dieser Richtung liegt.
+    const order = mode === "forward" ? [...rest].reverse() : [...rest];
+    for (let i = 1; i < order.length; i++) {
+      if (sel.has(order[i]) && !sel.has(order[i - 1])) [order[i - 1], order[i]] = [order[i], order[i - 1]];
+    }
+    rest = mode === "forward" ? order.reverse() : order;
+  }
+  doc.objects = [...fixed, ...rest];
+  const keep = [...selection];
+  buildWorld();
+  setSelection(keep);
+}
+
+// ---------- Rahmen: Objekte hinzufügen und herauslösen ----------
+
+// Gewählter Rahmen plus andere Objekte: die Objekte gehören danach fest zum Rahmen;
+// er wächst bei Bedarf, damit sie hineinpassen, und rückt hinter seinen Inhalt.
+function frameTarget() {
+  const frames = selection.filter((o) => o.type === "frame" && !o.hidden);
+  return frames.length === 1 && selection.length > 1 ? frames[0] : null;
+}
+
+function addToFrame() {
+  const f = frameTarget();
+  if (!f) return;
+  checkpoint();
+  const items = selection.filter((o) => o !== f);
+  for (const o of items) o.frame = f.id;
+  const pad = Math.min(f.w, f.h) * 0.04;
+  const x1 = Math.min(f.x, ...items.map((o) => o.x - pad));
+  const y1 = Math.min(f.y, ...items.map((o) => o.y - pad));
+  const x2 = Math.max(f.x + f.w, ...items.map((o) => o.x + o.w + pad));
+  const y2 = Math.max(f.y + f.h, ...items.map((o) => o.y + o.h + pad));
+  Object.assign(f, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
+  const first = Math.min(...items.map((o) => doc.objects.indexOf(o)));
+  if (doc.objects.indexOf(f) > first) {
+    doc.objects = doc.objects.filter((o) => o !== f);
+    doc.objects.splice(first, 0, f);
+  }
+  buildWorld();
+  setSelection([f]);
+}
+
+// Gewählte Objekte gehören zu keinem Rahmen mehr (auch wenn sie darin liegen).
+function removeFromFrame() {
+  const items = selection.filter((o) => o.type !== "frame" || selection.length > 1).filter((o) => inAnyFrame(o));
+  if (!items.length) return;
+  checkpoint();
+  for (const o of items) o.frame = null;
+  setSelection(items);
+}
+
+function inAnyFrame(o) {
+  return doc.objects.some((f) => f.type === "frame" && !f.hidden && f !== o && membersOf(f).includes(o));
+}
+
+// ---------- Abgerundete Ecken ----------
+// radius: 0..50 (Prozent der kürzeren Seite). Das abgerundete Rechteck startet bei 12.
+
+const NO_CORNERS = new Set(["ellipse", "half-circle", "cylinder", "cloud", "heart", "drop", "moon", "bubble-round", "world", "pin"]);
+
+function cornerRadius(o) {
+  return o.radius ?? (o.shape === "rounded" ? 12 : 0);
+}
+
+function hasCorners(o) {
+  if (!o || o.hidden) return false;
+  if (o.type === "frame" || o.type === "image") return true;
+  return o.type === "shape" && !NO_CORNERS.has(o.shape);
+}
+
+const radiusInput = document.getElementById("inp-radius");
+let radiusBefore = null;
+radiusInput.addEventListener("pointerdown", () => (radiusBefore = snapshot()));
+radiusInput.addEventListener("input", () => {
+  radiusBefore ??= snapshot();
+  for (const o of selection.filter(hasCorners)) {
+    o.radius = Number(radiusInput.value);
+    updateEl(o);
+  }
+});
+radiusInput.addEventListener("change", () => {
+  if (radiusBefore && radiusBefore !== snapshot()) checkpoint(radiusBefore);
+  radiusBefore = null;
+});
 
 function updateToolbar() {
   const isText = selected?.type === "text";
@@ -632,9 +749,14 @@ function updateToolbar() {
       !selected ||
       (need === "text" && !isText) ||
       (need === "color" && !colored) ||
-      (need === "image" && selected.type !== "image");
+      (need === "image" && selected.type !== "image") ||
+      (need === "frame-add" && !frameTarget()) ||
+      (need === "frame-remove" && !selection.some((o) => o.type !== "frame" && inAnyFrame(o))) ||
+      (need === "radius" && !selection.some(hasCorners));
     if (need === "image") b.hidden = selected?.type !== "image";
   });
+  document.querySelector(".radius-ctl").hidden = !selection.some(hasCorners);
+  if (selected && hasCorners(selected)) radiusInput.value = cornerRadius(selected);
   // Formatleiste zeigt den Zustand des ausgewählten Objekts.
   formatbar.classList.toggle("visible", !!selected && !presenting);
   if (!selected) return;
@@ -823,6 +945,8 @@ function deleteSelected() {
   if (!ids.size) return;
   checkpoint();
   doc.objects = doc.objects.filter((o) => !ids.has(o.id));
+  // Inhalt eines gelöschten Rahmens gehört danach wieder dorthin, wo er geometrisch liegt.
+  for (const o of doc.objects) if (ids.has(o.frame)) delete o.frame;
   // Gelöschte Objekte verschwinden aus dem Pfad und aus Animationsschritten; leere Schritte fallen weg.
   doc.path = doc.path
     .map((p) => (isAnim(p) ? { ...p, targets: p.targets.filter((t) => !ids.has(t)) } : p))
@@ -872,6 +996,8 @@ function pasteObjects(source = clipboard) {
     c.y += shift;
     return c;
   });
+  // Feste Rahmenzugehörigkeit auf die kopierten Rahmen umbiegen; ohne kopierten Rahmen löst sich die Kopie.
+  for (const c of copies) if (c.frame) c.frame = ids.get(c.frame) ?? null;
   // Rahmen hinter alles andere, der Rest obendrauf; neue Rahmen kommen auch in den Pfad.
   const frames = copies.filter((c) => c.type === "frame");
   doc.objects.splice(1, 0, ...frames);
@@ -921,15 +1047,20 @@ function inside(a, b) {
 
 // Welches Objekt liegt unter dem Zeiger? Rahmen nur an der Kante.
 function hitObject(e) {
-  const el = e.target.closest?.(".obj");
-  if (!el || el.classList.contains("hidden-frame")) return null;
-  const o = byId.get(el.dataset.id);
-  if (o.type !== "frame") return o;
   const p = eventToWorld(e);
   const band = FRAME_GRAB_PX / zoom();
-  const nearEdge =
-    p.x - o.x < band || o.x + o.w - p.x < band || p.y - o.y < band || o.y + o.h - p.y < band;
-  return nearEdge ? o : null;
+  // Alle Objekte unter dem Zeiger, oberstes zuerst: ein nach vorn geholter Rahmen soll den Inhalt
+  // darunter nicht verdecken, also zählt er nur an seiner Kante.
+  for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+    const objEl = el.closest?.(".obj");
+    if (!objEl || objEl.classList.contains("hidden-frame") || !world.contains(objEl)) continue;
+    const o = byId.get(objEl.dataset.id);
+    if (!o) continue;
+    if (o.type !== "frame") return o;
+    const nearEdge = p.x - o.x < band || o.x + o.w - p.x < band || p.y - o.y < band || o.y + o.h - p.y < band;
+    if (nearEdge) return o;
+  }
+  return null;
 }
 
 // ---------- Zeigergesten: verschieben, Objekt bewegen, Größe ändern ----------
@@ -1744,6 +1875,13 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  // Ebenen: Strg+↑/↓ einen Schritt, mit Umschalt ganz nach vorn/hinten.
+  if (e.ctrlKey && !presenting && selection.length && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    e.preventDefault();
+    const up = e.key === "ArrowUp";
+    reorder(e.shiftKey ? (up ? "front" : "back") : up ? "forward" : "backward");
+    return;
+  }
   if (e.ctrlKey && !presenting && ["c", "x", "d", "a"].includes(e.key.toLowerCase())) {
     e.preventDefault();
     ({ c: copySelection, x: cutSelection, d: duplicateSelection, a: selectAll })[e.key.toLowerCase()]();
@@ -1793,6 +1931,12 @@ on("btn-fade-in", () => addAnimation("fade-in"));
 on("btn-fade-out", () => addAnimation("fade-out"));
 on("btn-bold", toggleBold);
 on("btn-image-bg", imageToBackground);
+on("btn-front", () => reorder("front"));
+on("btn-forward", () => reorder("forward"));
+on("btn-backward", () => reorder("backward"));
+on("btn-back", () => reorder("back"));
+on("btn-frame-add", addToFrame);
+on("btn-frame-remove", removeFromFrame);
 on("btn-italic", toggleItalic);
 on("btn-align", cycleAlign);
 on("btn-undo", undo);

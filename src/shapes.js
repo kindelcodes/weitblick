@@ -148,15 +148,21 @@ export const SHAPE_GROUPS = [
 export const SHAPES = SHAPE_GROUPS.flatMap((g) => g.shapes);
 
 // points: eigene Eckpunkte im 100×100-Feld (z. B. für die Ebenen einer Pyramide), sonst die feste Form.
-export function shapeSvg(shape, fill, points = null) {
+// radius (0..50) rundet Ecken ab: die Form wird etwas verkleinert und mit einem gleichfarbigen,
+// rund verbundenen Rand gezeichnet, sodass sie wieder ihr Feld füllt, nur mit weichen Ecken.
+export function shapeSvg(shape, fill, points = null, radius = 0) {
   const pts = points ?? POLYGONS[shape];
   const open = `<svg class="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">`;
+  const r = Math.max(0, Math.min(50, radius)) / 2;
+  const k = 50 / (50 + r);
+  const round = r ? ` stroke="${fill}" stroke-width="${2 * r}" stroke-linejoin="round"` : "";
+  const wrap = (inner) => (r ? `<g transform="translate(50 50) scale(${k.toFixed(4)}) translate(-50 -50)">${inner}</g>` : inner);
   if (pts) {
     const list = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-    return `${open}<polygon points="${list}" fill="${fill}"/></svg>`;
+    return `${open}${wrap(`<polygon points="${list}" fill="${fill}"${round}/>`)}</svg>`;
   }
   // Die Datenbank bekommt einen etwas dunkleren Deckel, damit sie räumlich wirkt.
   const lid = shape === "cylinder" ? `<ellipse cx="50" cy="12" rx="50" ry="12" fill="#000" fill-opacity="0.18"/>` : "";
-  if (PATHS[shape]) return `${open}<path d="${PATHS[shape]}" fill="${fill}" fill-rule="evenodd"/>${lid}</svg>`;
+  if (PATHS[shape]) return `${open}${wrap(`<path d="${PATHS[shape]}" fill="${fill}" fill-rule="evenodd"${round}/>`)}${lid}</svg>`;
   return null;
 }

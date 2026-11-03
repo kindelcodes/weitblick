@@ -529,6 +529,10 @@ body:not(.insertbar-open) .insertbar {
 
 .formatbar.visible {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 24px);
+  width: max-content;
 }
 
 .formatbar button,
@@ -557,6 +561,28 @@ body:not(.insertbar-open) .insertbar {
 .formatbar :disabled {
   color: var(--disabled);
   cursor: default;
+}
+
+.formatbar .radius-ctl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.formatbar .radius-ctl[hidden] {
+  display: none;
+}
+
+.formatbar .radius-ctl input {
+  width: 70px;
+  accent-color: var(--orange);
+}
+
+.obj.frame-member {
+  outline: calc(1.5px * var(--inv, 1)) dashed var(--frame);
+  outline-offset: calc(3px * var(--inv, 1));
 }
 
 .formatbar .sep {
