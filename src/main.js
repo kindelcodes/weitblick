@@ -1286,9 +1286,11 @@ viewport.addEventListener("pointermove", (e) => {
   const dx = p.x - gesture.start.x;
   const dy = p.y - gesture.start.y;
   if (gesture.kind === "move") {
+    // Einrasten an Hilfslinien bzw. am Raster; mit gedrückter Alt-Taste frei.
+    const [sx, sy] = e.altKey ? (clearGuides(), [dx, dy]) : snapMove(gesture, dx, dy);
     for (const it of gesture.items) {
-      it.p.x = it.x + dx;
-      it.p.y = it.y + dy;
+      it.p.x = it.x + sx;
+      it.p.y = it.y + sy;
       updateEl(it.p);
     }
   } else if (gesture.kind === "group-resize") {
@@ -1321,10 +1323,103 @@ viewport.addEventListener("pointermove", (e) => {
   }
 });
 
+// ---------- Hilfslinien und Raster ----------
+// Beim Verschieben rasten Kanten und Mitten der bewegten Objekte an Kanten und Mitten anderer
+// sichtbarer Objekte ein (orange Linie). Ohne Treffer und mit eingeschaltetem Raster am Raster.
+
+const SNAP_PX = 7;
+const GRID_UNIT = 40; // Leinwand-Einheiten, wie das Punktraster
+let gridOn = false;
+try {
+  gridOn = localStorage.getItem("weitblick-grid") === "1";
+} catch {
+  // ohne Speicher: Raster aus
+}
+
+// Rasterweite passend zur Zoomstufe, wie das angezeigte Punktraster.
+function gridStep() {
+  const px = GRID_UNIT * zoom();
+  return px < 12 ? GRID_UNIT * Math.ceil(12 / px) : GRID_UNIT;
+}
+
+function toggleGrid() {
+  gridOn = !gridOn;
+  try {
+    localStorage.setItem("weitblick-grid", gridOn ? "1" : "0");
+  } catch {
+    // nur für diese Sitzung
+  }
+  viewport.classList.toggle("grid-on", gridOn);
+  document.getElementById("btn-grid").classList.toggle("on", gridOn);
+}
+
+function clearGuides() {
+  world.querySelectorAll(".guide").forEach((g) => g.remove());
+}
+
+function showGuide(axis, pos, from, to) {
+  const g = document.createElement("div");
+  g.className = `guide ${axis}`;
+  if (axis === "v") Object.assign(g.style, { left: `${pos}px`, top: `${from}px`, height: `${to - from}px` });
+  else Object.assign(g.style, { top: `${pos}px`, left: `${from}px`, width: `${to - from}px` });
+  world.append(g);
+}
+
+function snapMove(g, dx, dy) {
+  if (!g.snap) {
+    const moving = new Set(g.items.map((it) => it.p));
+    const xs = g.items.map((it) => it.x);
+    const ys = g.items.map((it) => it.y);
+    const box = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      w: Math.max(...g.items.map((it) => it.x + it.p.w)) - Math.min(...xs),
+      h: Math.max(...g.items.map((it) => it.y + it.p.h)) - Math.min(...ys),
+    };
+    const others = doc.objects.filter((o) => !o.hidden && !moving.has(o));
+    g.snap = { box, others };
+  }
+  const { box, others } = g.snap;
+  const tol = SNAP_PX / zoom();
+  const b = { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h };
+  const mine = { v: [b.x, b.x + b.w / 2, b.x + b.w], h: [b.y, b.y + b.h / 2, b.y + b.h] };
+  let best = { v: null, h: null };
+  for (const o of others) {
+    const theirs = { v: [o.x, o.x + o.w / 2, o.x + o.w], h: [o.y, o.y + o.h / 2, o.y + o.h] };
+    for (const axis of ["v", "h"]) {
+      for (const m of mine[axis]) {
+        for (const t of theirs[axis]) {
+          const d = t - m;
+          if (Math.abs(d) <= tol && (!best[axis] || Math.abs(d) < Math.abs(best[axis].d))) best[axis] = { d, t, o };
+        }
+      }
+    }
+  }
+  let sx = dx + (best.v?.d ?? 0);
+  let sy = dy + (best.h?.d ?? 0);
+  if (gridOn) {
+    const step = gridStep();
+    if (!best.v) sx = Math.round((box.x + dx) / step) * step - box.x;
+    if (!best.h) sy = Math.round((box.y + dy) / step) * step - box.y;
+  }
+  clearGuides();
+  const nb = { x: box.x + sx, y: box.y + sy, w: box.w, h: box.h };
+  if (best.v) {
+    const o = best.v.o;
+    showGuide("v", best.v.t, Math.min(nb.y, o.y), Math.max(nb.y + nb.h, o.y + o.h));
+  }
+  if (best.h) {
+    const o = best.h.o;
+    showGuide("h", best.h.t, Math.min(nb.x, o.x), Math.max(nb.x + nb.w, o.x + o.w));
+  }
+  return [sx, sy];
+}
+
 const endGesture = (e) => {
   const g = gesture;
   gesture = null;
   viewport.classList.remove("dragging");
+  clearGuides();
   if (g?.before && snapshot() !== g.before) checkpoint(g.before);
   if (g?.kind === "marquee") {
     g.box.remove();
@@ -2338,6 +2433,11 @@ document.addEventListener("keydown", (e) => {
     reorder(e.shiftKey ? (up ? "front" : "back") : up ? "forward" : "backward");
     return;
   }
+  if (e.ctrlKey && !presenting && (e.key === "#" || e.code === "Backslash")) {
+    e.preventDefault();
+    toggleGrid();
+    return;
+  }
   if (e.ctrlKey && !presenting && e.key.toLowerCase() === "g") {
     e.preventDefault();
     if (e.shiftKey) ungroupSelection();
@@ -2381,6 +2481,9 @@ on("btn-zoom-out", () => zoomAt(1 / ZOOM_STEP, ...center()));
 on("btn-add-text", () => addObject("text"));
 on("btn-add-frame", () => addObject("frame"));
 on("btn-new", newDocument);
+on("btn-grid", toggleGrid);
+viewport.classList.toggle("grid-on", gridOn);
+document.getElementById("btn-grid").classList.toggle("on", gridOn);
 on("btn-insert", toggleSidebar);
 on("btn-text-smaller", () => changeTextSize(1 / 1.15));
 on("btn-text-bigger", () => changeTextSize(1.15));

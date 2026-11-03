@@ -34,6 +34,8 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Bild aus der Zwischenablage | Strg+V (z. B. nach einem Bildschirmfoto) |
 | Drehen | runder Anfasser über dem Objekt, Umschalt rastet in 15°-Schritten ein |
 | Breite der Seitenleisten | an der Kante ziehen (orange Linie), Doppelklick setzt zurück; wird gemerkt |
+| Hilfslinien | beim Verschieben rasten Kanten und Mitten an anderen Objekten ein (orange Linie); Alt beim Ziehen: frei |
+| Raster | Knopf # unten oder Strg+#: Objekte rasten am Raster ein, das Raster wird als Linien angezeigt |
 | Rechtsklick | auf ein Objekt: Kopieren, Anordnen, Rahmen, Pfad, Animation, Löschen; auf die freie Leinwand: Einfügen, Text/Rahmen/Form hier, Alles auswählen, Stil |
 | Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe, der orange Anfasser am gestrichelten Kasten skaliert sie gemeinsam |
 | Planet mit Monden | Einfügen → Diagramme: Kugel, Umlaufbahn und vier Monde als *ein* gruppierter Block |
