@@ -512,6 +512,72 @@ body:not(.insertbar-open) .insertbar {
 
 /* ---------- Formatleiste ---------- */
 
+/* Rechtsklick-Menü */
+.ctx-menu {
+  position: fixed;
+  z-index: 60;
+  display: none;
+  min-width: 230px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.ctx-menu.open {
+  display: block;
+}
+
+.ctx-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--panel-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover {
+  background: var(--active-bg);
+}
+
+.ctx-keys {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+
+/* Untermenü erscheint beim Überfahren rechts daneben (oder links, wenn rechts kein Platz ist). */
+.ctx-sub {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+}
+
+.ctx-item.has-sub:hover > .ctx-sub {
+  display: block;
+}
+
+.ctx-menu.flip-sub .ctx-sub {
+  left: auto;
+  right: 100%;
+}
+
 /* Kontextleiste: schwebt über der Auswahl, Position setzt positionContextBar(). */
 .formatbar {
   position: absolute;

@@ -959,8 +959,8 @@ function newId(prefix) {
   return id;
 }
 
-// Neues Objekt in der Mitte der aktuellen Ansicht, passend zur Zoomstufe.
-function addObject(kind) {
+// Neues Objekt in der Mitte der aktuellen Ansicht (oder um den Punkt at), passend zur Zoomstufe.
+function addObject(kind, at = null) {
   checkpoint();
   const vw = camera.w;
   const base = { x: 0, y: 0 };
@@ -973,8 +973,8 @@ function addObject(kind) {
     const [sw, sh] = SHAPES.find((s) => s.id === kind)?.size ?? [1, 1];
     o = { ...base, id: newId("s"), type: "shape", shape: kind, w: vw * 0.2 * sw, h: vw * 0.2 * sh, fill: doc.theme.accent };
   }
-  o.x = camera.cx - o.w / 2;
-  o.y = camera.cy - o.h / 2;
+  o.x = (at?.x ?? camera.cx) - o.w / 2;
+  o.y = (at?.y ?? camera.cy) - o.h / 2;
   // Rahmen liegen hinter allem anderen, damit ihr Inhalt klickbar bleibt.
   if (o.type === "frame") doc.objects.splice(1, 0, o);
   else doc.objects.push(o);
@@ -1026,18 +1026,26 @@ function cutSelection() {
   if (copySelection()) deleteSelected();
 }
 
-function pasteObjects(source = clipboard) {
+// at: Einfügen mit der Mitte an diesem Punkt (Rechtsklick „Hier einfügen“), sonst leicht versetzt.
+function pasteObjects(source = clipboard, at = null) {
   if (!source?.items.length) return;
   checkpoint();
   source.pastes += 1;
-  const shift = camera.w * 0.03 * source.pastes;
+  let dx = camera.w * 0.03 * source.pastes;
+  let dy = dx;
+  if (at) {
+    const xs = source.items.flatMap((o) => [o.x, o.x + o.w]);
+    const ys = source.items.flatMap((o) => [o.y, o.y + o.h]);
+    dx = at.x - (Math.min(...xs) + Math.max(...xs)) / 2;
+    dy = at.y - (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
   const ids = new Map();
   const copies = source.items.map((o) => {
     const c = structuredClone(o);
     c.id = newId(o.type[0]);
     ids.set(o.id, c.id);
-    c.x += shift;
-    c.y += shift;
+    c.x += dx;
+    c.y += dy;
     return c;
   });
   // Feste Rahmenzugehörigkeit auf die kopierten Rahmen umbiegen; ohne kopierten Rahmen löst sich die Kopie.
@@ -1887,9 +1895,148 @@ document.addEventListener("mousemove", () => {
   if (presenting) showControls();
 });
 
+// ---------- Rechtsklick-Menü ----------
+// Einträge: { label, keys, run, sub } oder "-" als Trenner. Was gerade nicht geht, steht gar nicht erst drin.
+
+const ctxMenu = document.createElement("div");
+ctxMenu.className = "ctx-menu";
+ctxMenu.setAttribute("role", "menu");
+document.body.append(ctxMenu);
+
+function buildMenu(items, el) {
+  el.replaceChildren();
+  // Trenner am Anfang, Ende und doppelt hintereinander weglassen.
+  const clean = items.filter((it, i, a) => it !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-"));
+  for (const it of clean) {
+    if (it === "-") {
+      el.append(Object.assign(document.createElement("div"), { className: "ctx-sep" }));
+      continue;
+    }
+    const b = document.createElement("button");
+    b.className = "ctx-item";
+    b.setAttribute("role", "menuitem");
+    b.innerHTML = `<span class="ctx-label"></span><span class="ctx-keys"></span>`;
+    b.querySelector(".ctx-label").textContent = it.label;
+    b.querySelector(".ctx-keys").textContent = it.sub ? "▸" : (it.keys ?? "");
+    if (it.sub) {
+      const sub = document.createElement("div");
+      sub.className = "ctx-menu ctx-sub";
+      buildMenu(it.sub, sub);
+      b.append(sub);
+      b.classList.add("has-sub");
+    } else {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        it.run();
+      });
+    }
+    el.append(b);
+  }
+}
+
+function closeMenu() {
+  ctxMenu.classList.remove("open");
+}
+
+function objectMenu(at) {
+  const one = selection.length === 1 ? selected : null;
+  return [
+    { label: "Ausschneiden", keys: "Strg+X", run: cutSelection },
+    { label: "Kopieren", keys: "Strg+C", run: copySelection },
+    clipboard && { label: "Hier einfügen", keys: "Strg+V", run: () => pasteObjects(clipboard, at) },
+    { label: "Duplizieren", keys: "Strg+D", run: duplicateSelection },
+    "-",
+    {
+      label: "Anordnen",
+      sub: [
+        { label: "Ganz nach vorn", keys: "Strg+Umschalt+↑", run: () => reorder("front") },
+        { label: "Eine Ebene nach vorn", keys: "Strg+↑", run: () => reorder("forward") },
+        { label: "Eine Ebene nach hinten", keys: "Strg+↓", run: () => reorder("backward") },
+        { label: "Ganz nach hinten", keys: "Strg+Umschalt+↓", run: () => reorder("back") },
+      ],
+    },
+    frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
+    selection.some((o) => o.type !== "frame" && inAnyFrame(o)) && { label: "Aus dem Rahmen lösen", run: removeFromFrame },
+    one?.type === "image" && { label: "Als Hintergrund verwenden", run: imageToBackground },
+    one?.type === "text" && { label: "Text bearbeiten", keys: "Doppelklick", run: () => startEditing(one) },
+    "-",
+    { label: "Als Pfadschritt anhängen", run: addSelectedToPath },
+    { label: "Beim Präsentieren einblenden", run: () => addAnimation("fade-in") },
+    { label: "Beim Präsentieren ausblenden", run: () => addAnimation("fade-out") },
+    one && { label: "Hierher zoomen", run: () => flyToObject(one) },
+    "-",
+    { label: "Löschen", keys: "Entf", run: deleteSelected },
+  ].filter(Boolean);
+}
+
+function canvasMenu(at) {
+  return [
+    clipboard && { label: "Hier einfügen", keys: "Strg+V", run: () => pasteObjects(clipboard, at) },
+    "-",
+    { label: "Text hier", run: () => addObject("text", at) },
+    { label: "Rahmen hier", run: () => addObject("frame", at) },
+    { label: "Bild einfügen …", run: chooseImages },
+    {
+      label: "Form",
+      sub: ["rect", "rounded", "ellipse", "triangle", "hexagon", "star", "arrow", "bubble"].map((id) => ({
+        label: SHAPES.find((s) => s.id === id)?.label ?? id,
+        run: () => addObject(id, at),
+      })),
+    },
+    "-",
+    { label: "Alles auswählen", keys: "Strg+A", run: selectAll },
+    { label: "Zum Überblick", keys: "Pos1", run: () => goTo(0) },
+    { label: "Stil und Hintergrund …", run: () => openSidebar("style") },
+    "-",
+    { label: "Rückgängig", keys: "Strg+Z", run: undo },
+    { label: "Wiederholen", keys: "Strg+Y", run: redo },
+  ].filter(Boolean);
+}
+
+function openSidebar(tab) {
+  if (!document.body.classList.contains("insertbar-open")) toggleSidebar();
+  showTab(tab);
+}
+
+viewport.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (presenting || e.target.closest(".formatbar")) return;
+  if (isEditing()) document.activeElement.blur();
+  const at = eventToWorld(e);
+  const hit = hitObject(e);
+  if (hit && !selection.includes(hit)) select(hit);
+  if (!hit) select(null);
+  buildMenu(hit ? objectMenu(at) : canvasMenu(at), ctxMenu);
+  ctxMenu.classList.add("open");
+  // Im Fenster halten.
+  const w = ctxMenu.offsetWidth;
+  const h = ctxMenu.offsetHeight;
+  ctxMenu.style.left = `${Math.min(e.clientX, innerWidth - w - 4)}px`;
+  ctxMenu.style.top = `${Math.min(e.clientY, innerHeight - h - 4)}px`;
+  ctxMenu.classList.toggle("flip-sub", e.clientX + w * 2 > innerWidth);
+});
+
+// Außerhalb klicken, Esc, Scrollen oder Fensterwechsel schließt das Menü.
+document.addEventListener("pointerdown", (e) => {
+  if (!ctxMenu.contains(e.target)) closeMenu();
+});
+viewport.addEventListener("wheel", closeMenu, { passive: true });
+window.addEventListener("blur", closeMenu);
+
+// Das Browser-Menü (Neu laden, Untersuchen …) gibt es in der App nicht; in Eingabefeldern bleibt es.
+document.addEventListener("contextmenu", (e) => {
+  if (!e.target.closest("input, textarea, [contenteditable='plaintext-only']")) e.preventDefault();
+});
+
 // ---------- Tasten und Knöpfe ----------
 
 document.addEventListener("keydown", (e) => {
+  if (ctxMenu.classList.contains("open")) {
+    if (e.key === "Escape") e.preventDefault();
+    closeMenu();
+    if (e.key === "Escape") return;
+  }
   if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
     e.preventDefault();
     if (e.shiftKey) saveAs();
