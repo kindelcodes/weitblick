@@ -74,6 +74,20 @@ Präsentieren mit Kamerafahrten und freiem Erkunden · Speichern als eine Datei 
 
 **Soll:** Animationsschritte · Sprechernotizen und Referentenansicht · Themen · PDF-Export.
 
+**Fahrplan nächste Woche (ab 09.11.2026): Graphen aus OriginLab und andere eingebettete Objekte**
+1. **Verknüpfte Grafik mit Live-Aktualisierung:** SVG (bevorzugt, bleibt beim Zoomen scharf), PNG oder
+   unter Windows EMF einfügen; Weitblick merkt sich den Pfad, beobachtet die Datei und aktualisiert den
+   Graphen sofort nach einem neuen Export – eine Kopie bleibt eingebettet, damit die Datei überall läuft.
+2. **„In Origin bearbeiten“:** Rechtsklick öffnet das verknüpfte Origin-Projekt (.opju) mit der
+   Standard-App; nach dem Neuexport aktualisiert sich der Graph über Punkt 1 (wie der OLE-Doppelklick).
+3. **Vektorgrafik bevorzugen:** SVG/EMF als Vektor einbinden, damit Achsen und Beschriftungen bei
+   jeder Zoomstufe scharf bleiben.
+4. **PowerPoint-Import von OLE-Objekten:** das mitgespeicherte Vorschaubild (meist EMF) übernehmen und
+   in PNG umwandeln (Windows mit Bordmitteln, Linux eingeschränkt) statt eines Platzhalters.
+5. Offen: Einfügen eines Origin-Graphen direkt aus der Zwischenablage (EMF) – je nach Arbeitsweise.
+
+Zurückgestellt: eigene Diagramme aus CSV-Daten (Linie, Punkte, Balken), verknüpft und live aktualisiert.
+
 **Geplant (Wunschliste):**
 - **Planeten-Block:** eine große Kugel mit mehreren Monden auf einer Umlaufbahn, die als *ein* Block gilt
   (gemeinsam verschieben, skalieren, als ein Pfadschritt). Braucht dafür Gruppen (Strg+G / Strg+Umschalt+G).
