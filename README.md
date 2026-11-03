@@ -43,6 +43,9 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Animationsschritt | Objekt(e) auswählen, „✦ Einblenden“ oder „✧ Ausblenden“ in der Formatleiste; der Schritt landet direkt hinter dem aktuellen Pfadschritt, die Kamera bleibt dabei stehen |
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
+| Neue Präsentation | „Neu“ oder Strg+N |
+| Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 13 Formen (u. a. Fünf- bis Achteck, Stern, Pfeil), über 2.000 Symbole, 8 Smart-Diagramme, Google-Schriften |
+| Schriftart | Formatleiste: Standard-, eingebettete und alle Systemschriften |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
@@ -56,6 +59,10 @@ Eine ZIP-Datei mit:
   Ab Version 2 kann ein Pfadeintrag statt einer Objekt-id auch ein Animationsschritt sein:
   `{ "type": "fade-in" | "fade-out", "targets": ["id", …] }`.
 - `media/`: eingefügte Bilder in Originalform (unkomprimiert abgelegt, weil sie schon komprimiert sind)
+  und unter `media/fonts/` eingebettete Google-Schriften (woff2, lateinische Zeichen). Welche Schrift
+  welche Datei nutzt, steht in `presentation.json` unter `fonts`.
+
+Symbole stammen aus [Lucide](https://lucide.dev) (ISC-Lizenz, `src/vendor/`) und sind in der App enthalten.
 
 ## Bauen
 

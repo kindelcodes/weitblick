@@ -1,5 +1,8 @@
 import { Camera, fitRect } from "./camera.js";
 import { demo } from "./demo.js";
+import { SHAPES, shapeSvg } from "./shapes.js";
+import { DIAGRAMS } from "./diagrams.js";
+import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
 const MIN_W = 20; // stärkster Zoom: 20 Leinwand-Einheiten sichtbar
@@ -160,6 +163,7 @@ function makeEl(o) {
   el.dataset.id = o.id;
   if (o.type === "frame" && o.hidden) el.classList.add("hidden-frame");
   if (o.type === "shape") el.classList.add(o.shape);
+  if (o.type === "icon") el.innerHTML = iconSvg(o.name);
   if (o.type === "text") el.addEventListener("blur", () => finishEditing(el));
   updateEl(o, el);
   return el;
@@ -167,7 +171,13 @@ function makeEl(o) {
 
 function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
-  if (o.type === "shape") el.style.background = o.fill;
+  if (o.type === "shape") {
+    const svg = shapeSvg(o.shape, o.fill, o.points);
+    el.style.background = svg ? "" : o.fill;
+    el.querySelector(".shape-svg")?.remove();
+    if (svg) el.insertAdjacentHTML("afterbegin", svg);
+  }
+  if (o.type === "icon") el.style.color = o.color || doc.theme.text;
   if (o.type === "frame") el.style.background = o.fill || "";
   if (o.type === "image") {
     const m = media.get(o.src);
@@ -182,7 +192,7 @@ function updateEl(o, el = elOf(o)) {
       textAlign: o.align || "left",
       fontWeight: o.weight || 400,
       fontStyle: o.italic ? "italic" : "normal",
-      fontFamily: FONTS[o.font] ?? FONTS.sans,
+      fontFamily: fontStack(o.font),
     });
   }
   el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
@@ -486,6 +496,7 @@ function updateToolbar() {
   if (!selected) return;
   if (colored) colorInput.value = toHex(selected[colorKey(selected)] ?? defaultColor(selected));
   if (isText) {
+    ensureFontOption(selected.font ?? "sans");
     fontSelect.value = selected.font ?? "sans";
     document.getElementById("btn-bold").classList.toggle("on", (selected.weight ?? 400) >= 600);
     document.getElementById("btn-italic").classList.toggle("on", !!selected.italic);
@@ -509,11 +520,17 @@ const fontSelect = document.getElementById("sel-font");
 
 // Welches Feld eines Objekts die Farbe trägt.
 function colorKey(o) {
-  return { text: "color", shape: "fill", frame: "fill" }[o?.type] ?? null;
+  return { text: "color", icon: "color", shape: "fill", frame: "fill" }[o?.type] ?? null;
+}
+
+// Feste Namen (sans/serif/mono) oder der Name einer System- bzw. Google-Schrift.
+function fontStack(font) {
+  return FONTS[font] ?? `"${String(font).replace(/"/g, "")}", ${FONTS.sans}`;
 }
 
 function defaultColor(o) {
-  return o.type === "text" ? doc.theme.text : o.type === "frame" ? doc.theme.background : doc.theme.accent;
+  if (o.type === "text" || o.type === "icon") return doc.theme.text;
+  return o.type === "frame" ? doc.theme.background : doc.theme.accent;
 }
 
 // Farbwähler kennen nur #rrggbb.
@@ -617,7 +634,8 @@ function addObject(kind) {
   } else if (kind === "frame") {
     o = { ...base, id: newId("f"), type: "frame", w: vw * 0.6, h: vw * 0.6 * (9 / 16), title: "Neuer Rahmen" };
   } else {
-    o = { ...base, id: newId("s"), type: "shape", shape: kind, w: vw * 0.2, h: vw * 0.2, fill: doc.theme.accent };
+    const [sw, sh] = SHAPES.find((s) => s.id === kind)?.size ?? [1, 1];
+    o = { ...base, id: newId("s"), type: "shape", shape: kind, w: vw * 0.2 * sw, h: vw * 0.2 * sh, fill: doc.theme.accent };
   }
   o.x = camera.cx - o.w / 2;
   o.y = camera.cy - o.h / 2;
@@ -939,6 +957,7 @@ function showFileName() {
 // Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
 function usedMedia() {
   const names = new Set(doc.objects.filter((o) => o.type === "image").map((o) => o.src));
+  for (const f of doc.fonts ?? []) for (const face of f.faces) names.add(face.src);
   return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
 }
 
@@ -956,6 +975,8 @@ async function saveAs() {
   const path = await tauri.dialog.save({ filters: FILTERS, defaultPath: `${doc.title}.weitblick` });
   if (!path) return;
   currentPath = path.endsWith(".weitblick") ? path : `${path}.weitblick`;
+  // Eine neue Präsentation heißt danach wie ihre Datei.
+  if (doc.title === "Neue Präsentation") doc.title = currentPath.split(/[\\/]/).pop().replace(/\.weitblick$/i, "");
   await save();
 }
 
@@ -986,23 +1007,249 @@ async function openPath(path) {
     const loaded = JSON.parse(result.json);
     if (loaded.format !== "weitblick") throw new Error("Das ist keine Weitblick-Präsentation.");
     if (loaded.version > FORMAT_VERSION) throw new Error("Die Datei stammt aus einer neueren Weitblick-Version.");
-    clearMedia();
-    for (const m of result.media) addMedia(m.name, m.data);
-    doc = loaded;
-    currentPath = path;
-    undoStack = [];
-    redoStack = [];
-    selection = [];
-    selected = null;
-    pathIndex = 0;
-    buildWorld();
-    buildPathList();
-    updateToolbar();
-    markSaved();
-    camera.set(frameState(doc.path[0]));
+    loadDocument(loaded, path, result.media);
   } catch (err) {
     await tauri.dialog.message(String(err.message ?? err), { title: "Öffnen fehlgeschlagen", kind: "error" });
   }
+}
+
+// Ein Dokument anzeigen: Medien und Schriften laden, Verlauf und Auswahl zurücksetzen.
+function loadDocument(loaded, path, mediaList = []) {
+  clearMedia();
+  for (const m of mediaList) addMedia(m.name, m.data);
+  doc = loaded;
+  doc.fonts ??= [];
+  registerDocFonts();
+  currentPath = path;
+  undoStack = [];
+  redoStack = [];
+  selection = [];
+  selected = null;
+  pathIndex = 0;
+  buildWorld();
+  buildPathList();
+  updateToolbar();
+  markSaved();
+  camera.set(frameState(doc.path[0]));
+}
+
+async function newDocument() {
+  if (!(await confirmDiscard())) return;
+  if (presenting) await stopPresentation();
+  loadDocument({
+    format: "weitblick",
+    version: FORMAT_VERSION,
+    title: "Neue Präsentation",
+    theme: structuredClone(demo.theme),
+    fonts: [],
+    objects: [{ id: "f-overview", type: "frame", x: -800, y: -450, w: 1600, h: 900, hidden: true, title: "Überblick" }],
+    path: ["f-overview"],
+  }, null);
+}
+
+// ---------- Symbole (Lucide) ----------
+
+function iconSvg(name) {
+  const nodes = ICON_NODES[name] ?? ICON_NODES["circle-help"] ?? [];
+  const inner = nodes
+    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(" ")}/>`)
+    .join("");
+  return `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+
+// Fertige Objekte (ohne id) um die Bildmitte herum einfügen und auswählen, als ein Rückgängig-Schritt.
+function insertObjects(items) {
+  checkpoint();
+  const added = items.map((o) => ({ ...o, id: newId(o.type[0]), x: o.x + camera.cx, y: o.y + camera.cy }));
+  doc.objects.push(...added);
+  buildWorld();
+  setSelection(added);
+}
+
+function insertIcon(name) {
+  const s = camera.w * 0.1;
+  insertObjects([{ type: "icon", name, x: -s / 2, y: -s / 2, w: s, h: s, color: doc.theme.accent }]);
+}
+
+function insertDiagram(id) {
+  const d = DIAGRAMS.find((x) => x.id === id);
+  if (d) insertObjects(d.build(camera.w / 16, doc.theme));
+}
+
+// ---------- Schriften ----------
+// Eingebettete Google-Schriften stehen in doc.fonts und liegen als woff2 unter media/fonts/.
+
+const GOOGLE_FONTS = [
+  "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins", "Inter", "Raleway", "Nunito", "Source Sans 3",
+  "Work Sans", "Rubik", "Oswald", "Bebas Neue", "Anton", "Archivo Black", "Playfair Display", "Merriweather",
+  "Lora", "PT Serif", "Libre Baskerville", "EB Garamond", "Cormorant Garamond", "Roboto Slab", "Zilla Slab",
+  "Fira Code", "JetBrains Mono", "Space Mono", "Caveat", "Dancing Script", "Pacifico", "Permanent Marker",
+  "Indie Flower", "Comfortaa", "Quicksand", "Exo 2", "Orbitron", "Audiowide", "Righteous", "Lobster", "Abril Fatface",
+];
+
+let registeredFonts = [];
+let systemFonts = null;
+
+function registerDocFonts() {
+  for (const f of registeredFonts) document.fonts.delete(f);
+  registeredFonts = [];
+  for (const fam of doc.fonts ?? []) {
+    for (const face of fam.faces) {
+      const m = media.get(face.src);
+      if (!m) continue;
+      const ff = new FontFace(fam.family, `url(${m.url})`, {
+        weight: face.weight,
+        style: face.style,
+        ...(face.range ? { unicodeRange: face.range } : {}),
+      });
+      document.fonts.add(ff);
+      registeredFonts.push(ff);
+    }
+  }
+  fillFontSelect();
+}
+
+async function addGoogleFont(family, status) {
+  family = family.trim();
+  if (!family) return;
+  if (doc.fonts.some((f) => f.family.toLowerCase() === family.toLowerCase())) {
+    applyFont(doc.fonts.find((f) => f.family.toLowerCase() === family.toLowerCase()).family);
+    return;
+  }
+  status.textContent = `Lade „${family}“ …`;
+  try {
+    const faces = await tauri.core.invoke("google_font", { family });
+    const slug = family.toLowerCase().replace(/\s+/g, "-");
+    checkpoint();
+    doc.fonts.push({
+      family,
+      faces: faces.map((f, i) => {
+        const src = `media/fonts/${slug}-${i}.woff2`;
+        addMedia(src, f.data);
+        return { src, weight: f.weight, style: f.style, range: f.range };
+      }),
+    });
+    registerDocFonts();
+    status.textContent = `„${family}“ ist in dieser Präsentation eingebettet.`;
+    applyFont(family);
+  } catch (err) {
+    status.textContent = String(err);
+  }
+}
+
+// Schrift auf die ausgewählten Texte anwenden, falls welche ausgewählt sind.
+function applyFont(family) {
+  format((o) => (o.font = family), isText);
+}
+
+function fillFontSelect() {
+  const groups = [
+    ["Standard", [["sans", "Serifenlos"], ["serif", "Serif"], ["mono", "Schreibmaschine"]]],
+    ["In dieser Präsentation", (doc.fonts ?? []).map((f) => [f.family, f.family])],
+    ["Systemschriften", (systemFonts ?? []).map((f) => [f, f])],
+  ];
+  fontSelect.replaceChildren(
+    ...groups
+      .filter(([, items]) => items.length)
+      .map(([title, items]) => {
+        const g = document.createElement("optgroup");
+        g.label = title;
+        for (const [value, text] of items) g.append(new Option(text, value));
+        return g;
+      }),
+  );
+  if (selected?.type === "text") fontSelect.value = selected.font ?? "sans";
+}
+
+// Eine Schrift, die die Liste nicht kennt (z. B. aus einer Datei von einem anderen Rechner), trotzdem anzeigen.
+function ensureFontOption(value) {
+  if ([...fontSelect.options].some((o) => o.value === value)) return;
+  fontSelect.append(new Option(`${value} (fehlt hier)`, value));
+}
+
+async function loadSystemFonts() {
+  try {
+    systemFonts = await tauri.core.invoke("system_fonts");
+    fillFontSelect();
+  } catch {
+    // Ohne Tauri (z. B. im Browser) gibt es nur die Standardschriften.
+  }
+}
+
+// ---------- Seitenleiste rechts: Formen, Symbole, Diagramme, Schriften ----------
+
+const sidebar = document.getElementById("insertbar");
+
+function showTab(tab) {
+  sidebar.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  sidebar.querySelectorAll("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== tab));
+}
+
+function buildSidebar() {
+  const shapes = sidebar.querySelector('[data-panel="shapes"]');
+  for (const s of SHAPES) {
+    const b = document.createElement("button");
+    b.className = "tile";
+    b.title = s.label;
+    const preview = shapeSvg(s.id, "currentColor") ?? `<span class="css-shape ${s.id}"></span>`;
+    b.innerHTML = `${preview}<span>${s.label}</span>`;
+    b.addEventListener("click", () => addObject(s.id));
+    shapes.append(b);
+  }
+
+  const diagrams = sidebar.querySelector('[data-panel="diagrams"]');
+  for (const d of DIAGRAMS) {
+    const b = document.createElement("button");
+    b.className = "row";
+    b.textContent = d.label;
+    b.addEventListener("click", () => insertDiagram(d.id));
+    diagrams.append(b);
+  }
+
+  const iconGrid = sidebar.querySelector(".icon-grid");
+  const search = sidebar.querySelector("#icon-search");
+  const names = Object.keys(ICON_NODES);
+  const showIcons = () => {
+    const q = search.value.trim().toLowerCase();
+    const hits = q
+      ? names.filter((n) => n.includes(q) || (ICON_TAGS[n] ?? []).some((t) => t.includes(q)))
+      : names;
+    iconGrid.replaceChildren(
+      ...hits.slice(0, 240).map((n) => {
+        const b = document.createElement("button");
+        b.title = n;
+        b.innerHTML = iconSvg(n);
+        b.addEventListener("click", () => insertIcon(n));
+        return b;
+      }),
+    );
+    sidebar.querySelector(".icon-count").textContent =
+      hits.length > 240 ? `240 von ${hits.length} – Suche verfeinern` : `${hits.length} Symbole`;
+  };
+  search.addEventListener("input", showIcons);
+  showIcons();
+
+  const fontList = sidebar.querySelector(".font-list");
+  const status = sidebar.querySelector(".font-status");
+  for (const f of GOOGLE_FONTS) {
+    const b = document.createElement("button");
+    b.className = "row";
+    b.textContent = f;
+    b.addEventListener("click", () => addGoogleFont(f, status));
+    fontList.append(b);
+  }
+  const custom = sidebar.querySelector("#font-custom");
+  custom.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addGoogleFont(custom.value, status);
+  });
+
+  sidebar.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  showTab("shapes");
+}
+
+function toggleSidebar() {
+  document.body.classList.toggle("insertbar-open");
+  render();
 }
 
 // ---------- Präsentieren ----------
@@ -1076,6 +1323,11 @@ document.addEventListener("keydown", (e) => {
     else save();
     return;
   }
+  if (e.ctrlKey && (e.key === "n" || e.key === "N")) {
+    e.preventDefault();
+    newDocument();
+    return;
+  }
   if (e.ctrlKey && (e.key === "o" || e.key === "O")) {
     e.preventDefault();
     openFile();
@@ -1130,8 +1382,8 @@ on("btn-zoom-in", () => zoomAt(ZOOM_STEP, ...center()));
 on("btn-zoom-out", () => zoomAt(1 / ZOOM_STEP, ...center()));
 on("btn-add-text", () => addObject("text"));
 on("btn-add-frame", () => addObject("frame"));
-on("btn-add-rect", () => addObject("rect"));
-on("btn-add-ellipse", () => addObject("ellipse"));
+on("btn-new", newDocument);
+on("btn-insert", toggleSidebar);
 on("btn-text-smaller", () => changeTextSize(1 / 1.15));
 on("btn-text-bigger", () => changeTextSize(1.15));
 on("btn-delete", deleteSelected);
@@ -1169,6 +1421,10 @@ new ResizeObserver(() => {
 
 // ---------- Start ----------
 
+doc.fonts ??= [];
+buildSidebar();
+fillFontSelect();
+loadSystemFonts();
 buildWorld();
 buildPathList();
 updateToolbar();

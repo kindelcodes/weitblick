@@ -20,6 +20,7 @@
       <span class="brand">Weitblick</span>
       <span class="doc-title" id="doc-title"></span>
       <div class="tools">
+        <button id="btn-new" title="Neue Präsentation (Strg+N)">Neu</button>
         <button id="btn-open" title="Öffnen (Strg+O)">Öffnen</button>
         <button id="btn-save" title="Speichern (Strg+S, unter neuem Namen: Strg+Umschalt+S)">Speichern</button>
         <button id="btn-undo" title="Rückgängig (Strg+Z)">↶</button>
@@ -28,8 +29,7 @@
         <button id="btn-add-image" title="Bild einfügen (oder Datei auf die Leinwand ziehen)">▣ Bild</button>
         <button id="btn-add-text" title="Text hinzufügen">T Text</button>
         <button id="btn-add-frame" title="Rahmen hinzufügen (kommt in den Pfad)">▭ Rahmen</button>
-        <button id="btn-add-rect" title="Rechteck hinzufügen">■ Rechteck</button>
-        <button id="btn-add-ellipse" title="Kreis hinzufügen">● Kreis</button>
+        <button id="btn-insert" title="Formen, Symbole, Diagramme und Schriften (Seitenleiste rechts)">◫ Einfügen</button>
         <span class="sep"></span>
         <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
         <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
@@ -71,6 +71,34 @@
         <button id="pc-exit" title="Beenden (Esc)">✕</button>
       </div>
     </main>
+
+    <aside id="insertbar" class="insertbar">
+      <div class="tabs">
+        <button data-tab="shapes">Formen</button>
+        <button data-tab="icons">Symbole</button>
+        <button data-tab="diagrams">Diagramme</button>
+        <button data-tab="fonts">Schriften</button>
+      </div>
+      <div data-panel="shapes" class="tile-grid"></div>
+      <div data-panel="icons">
+        <input id="icon-search" type="search" placeholder="Suchen (englisch, z. B. house, star)" />
+        <div class="icon-count"></div>
+        <div class="icon-grid"></div>
+        <p class="note">Symbole: Lucide (ISC-Lizenz)</p>
+      </div>
+      <div data-panel="diagrams" class="row-list">
+        <p class="note">Fügt eine fertige Anordnung aus Formen und Texten ein. Danach ist alles einzeln bearbeitbar.</p>
+      </div>
+      <div data-panel="fonts">
+        <p class="note">
+          Systemschriften stehen direkt in der Schriftauswahl. Google-Schriften werden einmal geladen (Internet nötig)
+          und dann in die Präsentation eingebettet, sodass sie überall offline funktionieren.
+        </p>
+        <input id="font-custom" type="text" placeholder="Anderer Google-Font-Name + Enter" />
+        <div class="font-status note"></div>
+        <div class="font-list row-list"></div>
+      </div>
+    </aside>
 
     <nav class="navbar">
       <button id="btn-prev" title="Zurück (←)">‹</button>

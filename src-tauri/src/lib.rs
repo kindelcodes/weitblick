@@ -86,6 +86,102 @@ fn import_media(path: String) -> Result<MediaFile, String> {
     Ok(MediaFile { name, data: STANDARD.encode(bytes) })
 }
 
+// Namen aller auf diesem Rechner installierten Schriftfamilien, sortiert.
+#[tauri::command]
+async fn system_fonts() -> Vec<String> {
+    let mut db = fontdb::Database::new();
+    db.load_system_fonts();
+    let mut names: Vec<String> = db
+        .faces()
+        .filter_map(|f| f.families.first().map(|(name, _)| name.clone()))
+        .filter(|n| !n.starts_with('.') && !n.is_empty())
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup();
+    names
+}
+
+// Ein Schnitt einer Google-Schrift: Datei (woff2, Base64) plus die Angaben für @font-face.
+#[derive(Serialize, Deserialize, Clone)]
+struct FontFace {
+    weight: String,
+    style: String,
+    range: String,
+    data: String,
+}
+
+// Google liefert woff2 nur an moderne Browser aus, daher eine passende Kennung.
+const FONT_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
+
+fn css_value<'a>(block: &'a str, key: &str) -> Option<&'a str> {
+    let start = block.find(key)? + key.len();
+    let rest = &block[start..];
+    Some(rest[..rest.find(';')?].trim())
+}
+
+// Lädt eine Schrift von Google Fonts (normal, fett, kursiv, fett-kursiv; nur lateinische Zeichen)
+// und legt sie im App-Datenordner ab, damit sie später auch offline wieder verfügbar ist.
+#[tauri::command]
+async fn google_font(app: tauri::AppHandle, family: String) -> Result<Vec<FontFace>, String> {
+    use tauri::Manager;
+    let family = family.trim().to_string();
+    if family.is_empty() || !family.chars().all(|c| c.is_alphanumeric() || c == ' ') {
+        return Err("Ungültiger Schriftname.".into());
+    }
+    let cache_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("fonts");
+    let cache_file = cache_dir.join(format!("{}.json", family.replace(' ', "_")));
+    if let Ok(text) = std::fs::read_to_string(&cache_file) {
+        if let Ok(faces) = serde_json::from_str::<Vec<FontFace>>(&text) {
+            return Ok(faces);
+        }
+    }
+
+    let name = family.replace(' ', "+");
+    // Nicht jede Schrift hat alle Schnitte; dann mit weniger noch einmal versuchen.
+    let variants = ["ital,wght@0,400;0,700;1,400;1,700", "wght@400;700", ""];
+    let mut css = None;
+    for v in variants {
+        let spec = if v.is_empty() { name.clone() } else { format!("{name}:{v}") };
+        let url = format!("https://fonts.googleapis.com/css2?family={spec}&display=swap");
+        if let Ok(resp) = ureq::get(&url).set("User-Agent", FONT_UA).call() {
+            css = resp.into_string().ok();
+            break;
+        }
+    }
+    let css = css.ok_or_else(|| format!("„{family}“ gibt es bei Google Fonts nicht, oder es besteht keine Internetverbindung."))?;
+
+    let mut faces = Vec::new();
+    // Jeder Block beginnt mit einem Kommentar wie /* latin */; nur lateinische Schnitte laden.
+    for block in css.split("/* ").skip(1) {
+        let subset = block.split(" */").next().unwrap_or("");
+        if subset != "latin" && subset != "latin-ext" {
+            continue;
+        }
+        let Some(src) = css_value(block, "src: url(").and_then(|s| s.split(')').next()) else {
+            continue;
+        };
+        let bytes = ureq::get(src)
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_reader()
+            .bytes()
+            .collect::<Result<Vec<u8>, _>>()
+            .map_err(|e| e.to_string())?;
+        faces.push(FontFace {
+            weight: css_value(block, "font-weight:").unwrap_or("400").to_string(),
+            style: css_value(block, "font-style:").unwrap_or("normal").to_string(),
+            range: css_value(block, "unicode-range:").unwrap_or("").to_string(),
+            data: STANDARD.encode(bytes),
+        });
+    }
+    if faces.is_empty() {
+        return Err(format!("Für „{family}“ wurden keine passenden Schriftdateien gefunden."));
+    }
+    let _ = std::fs::create_dir_all(&cache_dir);
+    let _ = std::fs::write(&cache_file, serde_json::to_string(&faces).unwrap_or_default());
+    Ok(faces)
+}
+
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
 #[tauri::command]
 fn startup_file() -> Option<String> {
@@ -103,7 +199,9 @@ pub fn run() {
             save_presentation,
             open_presentation,
             import_media,
-            startup_file
+            startup_file,
+            system_fonts,
+            google_font
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

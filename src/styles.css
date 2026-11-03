@@ -24,12 +24,16 @@ body {
 
 body {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 220px 1fr 0;
   grid-template-rows: 48px 1fr;
 }
 
+body.insertbar-open {
+  grid-template-columns: 220px 1fr 280px;
+}
+
 .topbar {
-  grid-column: 1 / 3;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -124,6 +128,155 @@ body {
   background: #2560d4;
 }
 
+/* ---------- Formen und Symbole auf der Leinwand ---------- */
+
+.obj .shape-svg,
+.obj .icon-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ---------- Seitenleiste rechts ---------- */
+
+.insertbar [data-panel][hidden] {
+  display: none;
+}
+
+.insertbar {
+  grid-column: 3;
+  grid-row: 2;
+  overflow: hidden auto;
+  background: var(--panel);
+  border-left: 1px solid #e3e5ea;
+  padding: 8px;
+  min-width: 0;
+}
+
+body:not(.insertbar-open) .insertbar {
+  padding: 0;
+  border: none;
+}
+
+.insertbar .tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.insertbar .tabs button,
+.insertbar .row,
+.insertbar .tile,
+.insertbar .icon-grid button {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--panel-text);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.insertbar .tabs button {
+  padding: 6px 2px;
+  font-size: 12px;
+}
+
+.insertbar .tabs button.on {
+  background: #e6eefe;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.insertbar button:hover {
+  background: #f1f3f7;
+}
+
+.insertbar input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  margin-bottom: 6px;
+  border: 1px solid #e3e5ea;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.insertbar .note,
+.insertbar .icon-count {
+  margin: 4px 2px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.insertbar .tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.insertbar .tile svg,
+.insertbar .tile .css-shape {
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+}
+
+.css-shape {
+  display: block;
+  background: var(--accent);
+}
+
+.css-shape.ellipse {
+  border-radius: 50%;
+}
+
+.css-shape.line {
+  height: 4px !important;
+  margin: 16px 0;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+}
+
+.insertbar .icon-grid button {
+  aspect-ratio: 1;
+  padding: 6px;
+}
+
+.icon-grid svg {
+  width: 100%;
+  height: 100%;
+}
+
+.row-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.insertbar .row {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
 /* ---------- Formatleiste ---------- */
 
 .formatbar {
@@ -210,8 +363,12 @@ body {
 }
 
 body.presenting {
-  grid-template-columns: 0 1fr;
+  grid-template-columns: 0 1fr 0;
   grid-template-rows: 0 1fr;
+}
+
+body.presenting .insertbar {
+  display: none;
 }
 
 body.presenting .topbar,
