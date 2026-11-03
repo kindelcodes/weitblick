@@ -74,4 +74,10 @@ Präsentieren mit Kamerafahrten und freiem Erkunden · Speichern als eine Datei 
 
 **Soll:** Animationsschritte · Sprechernotizen und Referentenansicht · Themen · PDF-Export.
 
+**Geplant (Wunschliste):**
+- **Planeten-Block:** eine große Kugel mit mehreren Monden auf einer Umlaufbahn, die als *ein* Block gilt
+  (gemeinsam verschieben, skalieren, als ein Pfadschritt). Braucht dafür Gruppen (Strg+G / Strg+Umschalt+G).
+- Rechtsklick-Menü, Hilfslinien beim Verschieben, Pfadnummern auf der Leinwand, Startbildschirm,
+  Übergangsart je Pfadschritt, Rahmenarten (Kreis, Klammer), Autospeichern, Export als PDF/HTML.
+
 **Kann:** Vorlagen und Inhaltsblöcke · weitere Übergänge (Drehen, Überblenden) · Video und Audio · Installationspakete.

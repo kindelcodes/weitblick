@@ -258,7 +258,43 @@ function render() {
   viewport.style.backgroundPosition = `${tx}px ${ty}px`;
   zoomLabel.textContent = `${Math.round(z * 100)} %`;
   updateParallax();
+  positionContextBar();
 }
+
+// ---------- Kontextleiste ----------
+// Die Leiste schwebt über der Auswahl (oder darunter, wenn oben kein Platz ist) und folgt ihr beim
+// Verschieben und Zoomen. Ist die Auswahl ganz außer Sicht, bleibt sie am Rand stehen.
+
+function positionContextBar() {
+  if (!formatbar.classList.contains("visible") || !selection.length) return;
+  const vr = viewport.getBoundingClientRect();
+  let top = Infinity;
+  let bottom = -Infinity;
+  let left = Infinity;
+  let right = -Infinity;
+  for (const o of selection) {
+    const r = elOf(o)?.getBoundingClientRect();
+    if (!r) continue;
+    top = Math.min(top, r.top);
+    bottom = Math.max(bottom, r.bottom);
+    left = Math.min(left, r.left);
+    right = Math.max(right, r.right);
+  }
+  if (top === Infinity) return;
+  const bw = formatbar.offsetWidth;
+  const bh = formatbar.offsetHeight;
+  const gap = 14;
+  // Platz für den Drehanfasser über dem Objekt lassen.
+  let y = top - vr.top - bh - gap - 24;
+  if (y < 8) y = bottom - vr.top + gap;
+  y = clamp(y, 8, vr.height - bh - 64);
+  const x = clamp((left + right) / 2 - vr.left - bw / 2, 8, vr.width - bw - 8);
+  formatbar.style.left = `${x}px`;
+  formatbar.style.top = `${y}px`;
+}
+
+// Beim Verschieben, Drehen oder Größeändern mitwandern (nach dem eigentlichen Zeiger-Handler).
+viewport.addEventListener("pointermove", () => requestAnimationFrame(positionContextBar));
 
 // ---------- Hintergrund ----------
 // doc.background = { src, fit: "cover" | "contain" | "tile", parallax }; das Bild liegt unter media/.
@@ -753,12 +789,20 @@ function updateToolbar() {
       (need === "frame-add" && !frameTarget()) ||
       (need === "frame-remove" && !selection.some((o) => o.type !== "frame" && inAnyFrame(o))) ||
       (need === "radius" && !selection.some(hasCorners));
-    if (need === "image") b.hidden = selected?.type !== "image";
+    // In der Kontextleiste steht nur, was zum ausgewählten Objekt passt.
+    if (formatbar.contains(b)) (b.closest("label") ?? b).hidden = b.disabled;
   });
   document.querySelector(".radius-ctl").hidden = !selection.some(hasCorners);
+  let first = true;
+  for (const g of formatbar.querySelectorAll(".fb-group")) {
+    g.hidden = ![...g.children].some((c) => !c.hidden);
+    g.classList.toggle("first", !g.hidden && first);
+    if (!g.hidden) first = false;
+  }
   if (selected && hasCorners(selected)) radiusInput.value = cornerRadius(selected);
   // Formatleiste zeigt den Zustand des ausgewählten Objekts.
   formatbar.classList.toggle("visible", !!selected && !presenting);
+  positionContextBar();
   if (!selected) return;
   if (colored) colorInput.value = toHex(selected[colorKey(selected)] ?? defaultColor(selected));
   if (isText) {

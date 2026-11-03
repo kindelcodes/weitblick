@@ -512,27 +512,48 @@ body:not(.insertbar-open) .insertbar {
 
 /* ---------- Formatleiste ---------- */
 
+/* Kontextleiste: schwebt über der Auswahl, Position setzt positionContextBar(). */
 .formatbar {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 12px;
+  z-index: 5;
   display: none;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  padding: 4px;
   background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
   cursor: default;
 }
 
 .formatbar.visible {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 16px);
   width: max-content;
+}
+
+.formatbar .fb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-left: 1px solid var(--line);
+}
+
+.formatbar .fb-group.first {
+  border-left: none;
+}
+
+.formatbar .fb-group[hidden],
+.formatbar [hidden] {
+  display: none !important;
+}
+
+.formatbar button.danger:hover {
+  background: #fde4dc;
 }
 
 .formatbar button,

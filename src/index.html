@@ -38,11 +38,6 @@
         <button id="btn-add-frame" title="Rahmen hinzufügen (kommt in den Pfad)">▭ Rahmen</button>
         <button id="btn-insert" title="Formen, Symbole, Diagramme und Schriften (Seitenleiste rechts)">◫ Einfügen</button>
         <span class="sep"></span>
-        <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
-        <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
-        <button id="btn-add-to-path" data-needs="any" title="Ausgewähltes Objekt als Schritt an den Pfad anhängen">+ Pfad</button>
-        <button id="btn-delete" data-needs="any" title="Löschen (Entf)">Löschen</button>
-        <span class="sep"></span>
         <button id="btn-present" class="primary" title="Präsentieren (F5, ab aktuellem Schritt: Umschalt+F5)">▶ Präsentieren</button>
       </div>
     </header>
@@ -55,31 +50,43 @@
     <main id="viewport" class="viewport">
       <div id="bg-layer" class="bg-layer"></div>
       <div id="world" class="world"></div>
-      <div id="formatbar" class="formatbar">
-        <label class="color" title="Farbe"><input type="color" id="inp-color" data-needs="color" /></label>
-        <span class="sep"></span>
-        <select id="sel-role" data-needs="text" title="Rolle: bestimmt die Stilschrift">
-          <option value="title">Titel</option>
-          <option value="subtitle">Untertitel</option>
-          <option value="body">Text</option>
-        </select>
-        <select id="sel-font" class="font-select" data-needs="text" title="Schriftart"></select>
-        <button id="btn-bold" data-needs="text" title="Fett (Strg+B)"><b>B</b></button>
-        <button id="btn-italic" data-needs="text" title="Kursiv (Strg+I)"><i>I</i></button>
-        <button id="btn-align" data-needs="text" title="Ausrichtung wechseln">⇤</button>
-        <label class="radius-ctl" title="Ecken abrunden">◜<input type="range" id="inp-radius" min="0" max="50" step="1" data-needs="radius" /></label>
-        <span class="sep"></span>
-        <button id="btn-front" data-needs="any" title="Ganz nach vorn (Strg+Umschalt+↑)">⤒</button>
-        <button id="btn-forward" data-needs="any" title="Eine Ebene nach vorn (Strg+↑)">↑</button>
-        <button id="btn-backward" data-needs="any" title="Eine Ebene nach hinten (Strg+↓)">↓</button>
-        <button id="btn-back" data-needs="any" title="Ganz nach hinten (Strg+Umschalt+↓)">⤓</button>
-        <span class="sep"></span>
-        <button id="btn-frame-add" data-needs="frame-add" title="Ausgewählte Objekte fest zum ausgewählten Rahmen hinzufügen (Rahmen und Objekte gemeinsam auswählen)">▣+ Rahmen</button>
-        <button id="btn-frame-remove" data-needs="frame-remove" title="Ausgewählte Objekte aus ihrem Rahmen lösen: sie bewegen sich nicht mehr mit ihm">▣− Rahmen</button>
-        <button id="btn-image-bg" data-needs="image" title="Dieses Bild als Hintergrund der ganzen Präsentation verwenden">▤ Als Hintergrund</button>
-        <span class="sep"></span>
-        <button id="btn-fade-in" data-needs="any" title="Animationsschritt: beim Präsentieren einblenden (nach dem aktuellen Schritt)">✦ Einblenden</button>
-        <button id="btn-fade-out" data-needs="any" title="Animationsschritt: beim Präsentieren ausblenden (nach dem aktuellen Schritt)">✧ Ausblenden</button>
+      <div id="formatbar" class="formatbar" role="toolbar" aria-label="Bearbeiten">
+        <div class="fb-group" data-group="text">
+          <select id="sel-role" data-needs="text" title="Rolle: bestimmt die Stilschrift">
+            <option value="title">Titel</option>
+            <option value="subtitle">Untertitel</option>
+            <option value="body">Text</option>
+          </select>
+          <select id="sel-font" class="font-select" data-needs="text" title="Schriftart"></select>
+          <button id="btn-text-smaller" data-needs="text" title="Schrift kleiner">A−</button>
+          <button id="btn-text-bigger" data-needs="text" title="Schrift größer">A+</button>
+          <button id="btn-bold" data-needs="text" title="Fett (Strg+B)"><b>B</b></button>
+          <button id="btn-italic" data-needs="text" title="Kursiv (Strg+I)"><i>I</i></button>
+          <button id="btn-align" data-needs="text" title="Ausrichtung wechseln">⇤</button>
+        </div>
+        <div class="fb-group" data-group="look">
+          <label class="color" title="Farbe"><input type="color" id="inp-color" data-needs="color" /></label>
+          <label class="radius-ctl" title="Ecken abrunden">◜<input type="range" id="inp-radius" min="0" max="50" step="1" data-needs="radius" /></label>
+        </div>
+        <div class="fb-group" data-group="frame">
+          <button id="btn-frame-add" data-needs="frame-add" title="Ausgewählte Objekte fest zum ausgewählten Rahmen hinzufügen">▣+ In Rahmen</button>
+          <button id="btn-frame-remove" data-needs="frame-remove" title="Aus dem Rahmen lösen: bewegt sich nicht mehr mit ihm">▣− Aus Rahmen</button>
+          <button id="btn-image-bg" data-needs="image" title="Dieses Bild als Hintergrund der ganzen Präsentation verwenden">▤ Als Hintergrund</button>
+        </div>
+        <div class="fb-group" data-group="layer">
+          <button id="btn-front" data-needs="any" title="Ganz nach vorn (Strg+Umschalt+↑)">⤒</button>
+          <button id="btn-forward" data-needs="any" title="Eine Ebene nach vorn (Strg+↑)">↑</button>
+          <button id="btn-backward" data-needs="any" title="Eine Ebene nach hinten (Strg+↓)">↓</button>
+          <button id="btn-back" data-needs="any" title="Ganz nach hinten (Strg+Umschalt+↓)">⤓</button>
+        </div>
+        <div class="fb-group" data-group="present">
+          <button id="btn-add-to-path" data-needs="any" title="Als Schritt an den Pfad anhängen">+ Pfad</button>
+          <button id="btn-fade-in" data-needs="any" title="Animationsschritt: beim Präsentieren einblenden (nach dem aktuellen Schritt)">✦ Ein</button>
+          <button id="btn-fade-out" data-needs="any" title="Animationsschritt: beim Präsentieren ausblenden (nach dem aktuellen Schritt)">✧ Aus</button>
+        </div>
+        <div class="fb-group" data-group="delete">
+          <button id="btn-delete" data-needs="any" class="danger" title="Löschen (Entf)">🗑</button>
+        </div>
       </div>
       <div class="progress"><div id="progress-bar"></div></div>
       <div class="present-controls">
