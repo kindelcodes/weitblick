@@ -44,7 +44,10 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | Neue Präsentation | „Neu“ oder Strg+N |
-| Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 36 Formen in 5 Gruppen, über 2.000 Symbole, 8 Smart-Diagramme, Google-Schriften |
+| Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile und eigene Stilkits, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 38 Formen in 6 Gruppen (inkl. Weltkarte), über 2.000 Symbole, 15 Inhaltsblöcke, Google-Schriften |
+| Eigenes Stilkit | Stil-Reiter: Farben, Schriften und fett/kursiv je Rolle einstellen, Namen eingeben, „Speichern“; steht danach in jeder Präsentation bereit |
+| Bild als Hintergrund | Bild auswählen, „▤ Als Hintergrund“ in der Formatleiste |
+| Vorschau eines Pfadschritts | Maus über den Eintrag in der Pfadliste halten |
 | Schriftart | Formatleiste: Standard-, eingebettete und alle Systemschriften |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
@@ -63,6 +66,8 @@ Eine ZIP-Datei mit:
   welche Datei nutzt, steht in `presentation.json` unter `fonts`.
 
 Symbole stammen aus [Lucide](https://lucide.dev) (ISC-Lizenz, `src/vendor/`) und sind in der App enthalten.
+Die Weltkarte beruht auf [Natural Earth](https://www.naturalearthdata.com) (gemeinfrei) über das Paket
+`world-atlas`; die Wortmarke nutzt Comfortaa (SIL Open Font License, `src/assets/`).
 
 ## Bauen
 

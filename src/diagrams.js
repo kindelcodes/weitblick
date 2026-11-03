@@ -173,6 +173,131 @@ export const DIAGRAMS = [
   },
 ];
 
+// Weitere Inhaltsblöcke (Tabelle, Ziel, Venn, Balken, Karte, Organigramm, Team).
+DIAGRAMS.push(
+  {
+    id: "table",
+    label: "Tabelle",
+    build(u, t) {
+      const out = [];
+      const cols = 4;
+      const rows = 4;
+      const cw = 3 * u;
+      const rh = 0.9 * u;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = (c - (cols - 1) / 2) * (cw + 0.06 * u);
+          const y = (r - (rows - 1) / 2) * (rh + 0.06 * u);
+          const fill = r === 0 ? t.accent : shade(t.background === "#ffffff" ? "#cccccc" : t.background, r % 2 ? 0.12 : 0.2);
+          out.push(box(x, y, cw, rh, fill));
+          const text = r === 0 ? `Spalte ${c + 1}` : c === 0 ? `Zeile ${r}` : "–";
+          out.push(boxText(x, y, cw, rh, text, 0.32 * u, r === 0 ? DARK : t.text, r === 0 ? { weight: 700 } : {}));
+        }
+      }
+      return out;
+    },
+  },
+  {
+    id: "target",
+    label: "Ziel",
+    build(u, t) {
+      const out = [];
+      const rings = 4;
+      for (let i = 0; i < rings; i++) {
+        const d = (5 - i * 1.15) * u;
+        out.push(box(-3 * u, 0, d, d, i % 2 ? shade(t.accent, 0.55) : t.accent, "ellipse"));
+      }
+      out.push(boxText(-3 * u, 0, 1.4 * u, 1.4 * u, "Ziel", 0.36 * u, DARK, { weight: 700 }));
+      for (let i = 0; i < 3; i++) {
+        const y = (i - 1) * 1.5 * u;
+        out.push(line(-0.4 * u, y, 1.4 * u, y, 0.05 * u, t.text));
+        out.push(label(4.2 * u, y, 5 * u, 0.6 * u, `Meilenstein ${i + 1}`, 0.4 * u, t.text, { align: "left" }));
+      }
+      return out;
+    },
+  },
+  {
+    id: "venn",
+    label: "Venn",
+    build(u, t) {
+      const out = [];
+      const colors = [t.accent, t.accent2 ?? shade(t.accent, 0.4), shade(t.accent, 0.6)];
+      const centers = [[-1.4, -0.9], [1.4, -0.9], [0, 1.5]];
+      centers.forEach(([cx, cy], i) => {
+        out.push({ ...box(cx * u, cy * u, 4.6 * u, 4.6 * u, colors[i], "ellipse"), opacity: 0.6 });
+      });
+      const labels = [[-2.4, -1.6, "Bereich A"], [2.4, -1.6, "Bereich B"], [0, 2.9, "Bereich C"], [0, -0.1, "Schnitt"]];
+      for (const [x, y, text] of labels) out.push(label(x * u, y * u, 2.6 * u, 0.6 * u, text, 0.36 * u, t.text, { weight: 700 }));
+      return out;
+    },
+  },
+  {
+    id: "bars",
+    label: "Balkendiagramm",
+    build(u, t) {
+      const out = [line(-5 * u, 2.5 * u, 5 * u, 2.5 * u, 0.06 * u, t.text)];
+      const values = [40, 65, 55, 85, 70];
+      values.forEach((v, i) => {
+        const x = (i - 2) * 2 * u;
+        const h = (v / 100) * 5 * u;
+        out.push(box(x, 2.5 * u - h / 2, 1.3 * u, h, i === 3 ? t.accent : shade(t.accent, 0.35)));
+        out.push(label(x, 2.5 * u - h - 0.4 * u, 1.6 * u, 0.5 * u, `${v} %`, 0.32 * u, t.text, { weight: 700 }));
+        out.push(label(x, 3 * u, 1.8 * u, 0.5 * u, `Wert ${i + 1}`, 0.28 * u, t.text));
+      });
+      return out;
+    },
+  },
+  {
+    id: "map",
+    label: "Weltkarte",
+    build(u, t) {
+      const out = [box(0, 0, 12 * u, 4.8 * u, t.accent2 ?? shade(t.accent, 0.5), "world")];
+      // Lage in der Karte (0..1): Europa, Nordamerika, Südostasien
+      const places = [[0.53, 0.2, "Europa"], [0.22, 0.27, "Nordamerika"], [0.79, 0.5, "Asien"]];
+      for (const [px, py, name] of places) {
+        const x = (px - 0.5) * 12 * u;
+        const y = (py - 0.5) * 4.8 * u;
+        out.push(box(x, y - 0.35 * u, 0.5 * u, 0.7 * u, t.accent, "pin"));
+        out.push(label(x, y - 1 * u, 2.6 * u, 0.5 * u, name, 0.3 * u, t.text, { weight: 700 }));
+      }
+      return out;
+    },
+  },
+  {
+    id: "tree",
+    label: "Organigramm",
+    build(u, t) {
+      const out = [];
+      const kids = [-4, 0, 4];
+      out.push(line(0, -1.6 * u, 0, -0.6 * u, 0.06 * u, t.text));
+      out.push(line(-4 * u, -0.6 * u, 4 * u, -0.6 * u, 0.06 * u, t.text));
+      for (const k of kids) out.push(line(k * u, -0.6 * u, k * u, 0.4 * u, 0.06 * u, t.text));
+      out.push(box(0, -2.2 * u, 3.4 * u, 1.2 * u, t.accent));
+      out.push(boxText(0, -2.2 * u, 3.4 * u, 1.2 * u, "Leitung", 0.4 * u, DARK, { weight: 700 }));
+      kids.forEach((k, i) => {
+        out.push(box(k * u, 1 * u, 3 * u, 1.1 * u, shade(t.accent, 0.4)));
+        out.push(boxText(k * u, 1 * u, 3 * u, 1.1 * u, `Bereich ${i + 1}`, 0.36 * u, DARK));
+      });
+      return out;
+    },
+  },
+  {
+    id: "team",
+    label: "Team",
+    build(u, t) {
+      const out = [];
+      for (let i = 0; i < 4; i++) {
+        const x = (i - 1.5) * 3 * u;
+        out.push(box(x, -0.8 * u, 2 * u, 2 * u, t.accent, "ellipse"));
+        out.push({ type: "icon", name: "user", x: x - 0.6 * u, y: -1.4 * u, w: 1.2 * u, h: 1.2 * u, color: DARK });
+        out.push(label(x, 0.75 * u, 2.8 * u, 0.6 * u, `Name ${i + 1}`, 0.38 * u, t.text, { weight: 700 }));
+        out.push(label(x, 1.35 * u, 2.8 * u, 0.5 * u, "Rolle", 0.3 * u, t.accent));
+      }
+      return out;
+    },
+  },
+);
+
 // Farbe aufhellen (amount 0..1), für abgestufte Flächen.
 function shade(hex, amount) {
   const n = parseInt(hex.slice(1), 16);

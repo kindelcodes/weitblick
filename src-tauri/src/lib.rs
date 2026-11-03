@@ -182,6 +182,29 @@ async fn google_font(app: tauri::AppHandle, family: String) -> Result<Vec<FontFa
     Ok(faces)
 }
 
+// Eigene Stilkits gelten für alle Präsentationen und liegen deshalb im App-Datenordner.
+fn style_kits_file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("style-kits.json"))
+}
+
+#[tauri::command]
+fn load_style_kits(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(std::fs::read_to_string(style_kits_file(&app)?).unwrap_or_else(|_| "[]".into()))
+}
+
+#[tauri::command]
+fn save_style_kits(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    // Nur gültiges JSON schreiben, damit eine kaputte Datei nie alle Kits verliert.
+    serde_json::from_str::<serde_json::Value>(&json).map_err(|e| e.to_string())?;
+    let file = style_kits_file(&app)?;
+    let tmp = file.with_extension("json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &file).map_err(|e| e.to_string())
+}
+
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
 #[tauri::command]
 fn startup_file() -> Option<String> {
@@ -201,7 +224,9 @@ pub fn run() {
             import_media,
             startup_file,
             system_fonts,
-            google_font
+            google_font,
+            load_style_kits,
+            save_style_kits
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

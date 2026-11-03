@@ -204,12 +204,13 @@ function updateEl(o, el = elOf(o)) {
       fontSize: `${o.size}px`,
       color: o.color || doc.theme.text,
       textAlign: o.align || "left",
-      fontWeight: o.weight || 400,
-      fontStyle: o.italic ? "italic" : "normal",
+      fontWeight: textWeight(o),
+      fontStyle: textItalic(o) ? "italic" : "normal",
       fontFamily: fontStack(textFont(o)),
     });
   }
   el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
+  el.style.setProperty("--alpha", o.opacity ?? 1);
   el.classList.toggle("selected", selection.includes(o));
   el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove());
   // Anfasser nur bei genau einem ausgewählten Objekt.
@@ -294,6 +295,22 @@ async function chooseBackground() {
   updateStylePanel();
 }
 
+// Ein Bild auf der Leinwand wird zum Hintergrund: es verschwindet als Objekt und füllt dahinter alles aus.
+function imageToBackground() {
+  const img = selected?.type === "image" ? selected : null;
+  if (!img) return;
+  checkpoint();
+  doc.background = { fit: "cover", parallax: false, ...doc.background, src: img.src };
+  doc.objects = doc.objects.filter((o) => o !== img);
+  doc.path = doc.path.filter((p) => p !== img.id);
+  selection = [];
+  selected = null;
+  buildWorld();
+  buildPathList();
+  updateToolbar();
+  updateStylePanel();
+}
+
 function setBackground(change) {
   checkpoint();
   doc.background = { fit: "cover", parallax: false, ...doc.background, ...change };
@@ -330,6 +347,8 @@ function buildPathList() {
     li.querySelector(".num").textContent = id === doc.path[0] ? "⌂" : i;
     li.querySelector(".label").textContent = isAnim(id) ? animLabel(id) : (stepLabel(byId.get(id)) ?? id);
     li.classList.toggle("anim", isAnim(id));
+    li.addEventListener("mouseenter", () => showPathPreview(li, i));
+    li.addEventListener("mouseleave", hidePathPreview);
     li.addEventListener("click", (e) => {
       if (pathDrag?.moved || e.target.isContentEditable) return;
       goTo(i);
@@ -409,6 +428,7 @@ pathList.addEventListener("pointermove", (e) => {
   if (!pathDrag) return;
   if (!pathDrag.moved && Math.abs(e.clientY - pathDrag.y) < 5) return;
   pathDrag.moved = true;
+  hidePathPreview();
   pathDrag.li.classList.add("dragging");
   pathDrag.to = dropIndex(e.clientY);
   const items = [...pathList.children];
@@ -442,6 +462,55 @@ function addSelectedToPath() {
   if (!selected) return;
   checkpoint();
   addToPath(selected.id);
+}
+
+// ---------- Vorschau beim Überfahren der Pfadliste ----------
+// Eine verkleinerte Kopie der Leinwand, so gezeigt, wie die Kamera bei diesem Schritt steht.
+
+const PREVIEW_W = 240;
+const pathPreview = document.createElement("div");
+pathPreview.className = "path-preview";
+document.body.append(pathPreview);
+
+function showPathPreview(li, i) {
+  if (pathDrag?.moved || presenting) return;
+  const cam = stepCamera(i);
+  const ratio = viewport.clientWidth > 0 ? viewport.clientHeight / viewport.clientWidth : 9 / 16;
+  const w = PREVIEW_W;
+  const h = Math.round(w * ratio);
+  const stage = document.createElement("div");
+  stage.className = "pp-stage";
+  const bg = doc.background?.src ? media.get(doc.background.src) : null;
+  Object.assign(stage.style, {
+    width: `${w}px`,
+    height: `${h}px`,
+    backgroundColor: doc.theme.background,
+    backgroundImage: bg ? `url("${bg.url}")` : "",
+  });
+  const copy = world.cloneNode(true);
+  copy.removeAttribute("id");
+  copy.querySelectorAll(".handle, .rot-handle").forEach((x) => x.remove());
+  copy.querySelectorAll(".selected").forEach((x) => x.classList.remove("selected"));
+  // Wie beim Präsentieren: Rahmen ohne Rand, eingeblendete Objekte erst ab ihrem Schritt.
+  const hidden = hiddenAt(i);
+  copy.querySelectorAll(".obj").forEach((x) => {
+    x.style.transition = "none";
+    if (x.classList.contains("frame")) x.style.borderColor = "transparent";
+    if (hidden.has(x.dataset.id)) x.style.opacity = "0";
+  });
+  const z = w / cam.w;
+  copy.style.transform = `translate(${w / 2 - cam.cx * z}px, ${h / 2 - cam.cy * z}px) scale(${z})`;
+  stage.append(copy);
+  pathPreview.replaceChildren(stage);
+  const r = li.getBoundingClientRect();
+  pathPreview.style.left = `${r.right + 10}px`;
+  pathPreview.style.top = `${Math.max(8, Math.min(r.top + r.height / 2 - h / 2, innerHeight - h - 16))}px`;
+  pathPreview.classList.add("visible");
+}
+
+function hidePathPreview() {
+  pathPreview.classList.remove("visible");
+  pathPreview.replaceChildren();
 }
 
 function markActive() {
@@ -559,7 +628,12 @@ function updateToolbar() {
   const colored = colorKey(selected) !== null;
   document.querySelectorAll("[data-needs]").forEach((b) => {
     const need = b.dataset.needs;
-    b.disabled = !selected || (need === "text" && !isText) || (need === "color" && !colored);
+    b.disabled =
+      !selected ||
+      (need === "text" && !isText) ||
+      (need === "color" && !colored) ||
+      (need === "image" && selected.type !== "image");
+    if (need === "image") b.hidden = selected?.type !== "image";
   });
   // Formatleiste zeigt den Zustand des ausgewählten Objekts.
   formatbar.classList.toggle("visible", !!selected && !presenting);
@@ -569,8 +643,8 @@ function updateToolbar() {
     ensureFontOption(textFont(selected));
     fontSelect.value = textFont(selected);
     roleSelect.value = selected.role ?? "body";
-    document.getElementById("btn-bold").classList.toggle("on", (selected.weight ?? 400) >= 600);
-    document.getElementById("btn-italic").classList.toggle("on", !!selected.italic);
+    document.getElementById("btn-bold").classList.toggle("on", textWeight(selected) >= 600);
+    document.getElementById("btn-italic").classList.toggle("on", textItalic(selected));
     document.getElementById("btn-align").textContent = ALIGN_ICONS[selected.align ?? "left"];
   }
 }
@@ -599,6 +673,15 @@ function colorKey(o) {
 // Eine eigens gewählte Schrift gewinnt, sonst gilt die Schrift des Stils für die Rolle des Textes.
 function textFont(o) {
   return o.font ?? doc.theme.fonts?.[o.role ?? "body"] ?? "sans";
+}
+
+// Fett und kursiv: eigene Einstellung am Text, sonst die des Stils für seine Rolle.
+function textWeight(o) {
+  return o.weight ?? (doc.theme.bold?.[o.role ?? "body"] ? 700 : 400);
+}
+
+function textItalic(o) {
+  return o.italic ?? !!doc.theme.italic?.[o.role ?? "body"];
 }
 
 // Feste Namen (sans/serif/mono) oder der Name einer System- bzw. Google-Schrift.
@@ -663,13 +746,13 @@ roleSelect.addEventListener("change", () =>
 // Der neue Zustand richtet sich nach dem zuletzt gewählten Text und gilt dann für alle.
 function toggleBold() {
   if (selected?.type !== "text") return;
-  const weight = (selected.weight ?? 400) >= 600 ? 400 : 700;
+  const weight = textWeight(selected) >= 600 ? 400 : 700;
   format((o) => (o.weight = weight), isText);
 }
 
 function toggleItalic() {
   if (selected?.type !== "text") return;
-  const italic = !selected.italic;
+  const italic = !textItalic(selected);
   format((o) => (o.italic = italic), isText);
 }
 
@@ -1334,6 +1417,94 @@ async function setThemeValue(key, value, isFont = false) {
 
 const styleStatus = sidebar.querySelector(".style-status");
 
+// Fett/kursiv für eine Rolle im Stil umschalten.
+function toggleThemeStyle(role, kind) {
+  checkpoint();
+  const old = doc.theme;
+  doc.theme = { ...old, id: "custom", [kind]: { ...old[kind], [role]: !old[kind]?.[role] } };
+  buildWorld();
+  updateToolbar();
+  updateStylePanel();
+}
+
+// ---------- Eigene Stilkits ----------
+// Gespeichert im App-Datenordner (style-kits.json), damit sie in jeder Präsentation zur Verfügung stehen.
+
+let styleKits = [];
+
+async function loadStyleKits() {
+  try {
+    styleKits = JSON.parse(tauri ? await tauri.core.invoke("load_style_kits") : (localStorage.getItem("weitblick-kits") ?? "[]"));
+  } catch {
+    styleKits = [];
+  }
+  renderStyleKits();
+}
+
+async function persistStyleKits() {
+  const json = JSON.stringify(styleKits, null, 2);
+  try {
+    if (tauri) await tauri.core.invoke("save_style_kits", { json });
+    else localStorage.setItem("weitblick-kits", json);
+  } catch (err) {
+    styleStatus.textContent = `Stilkits konnten nicht gespeichert werden: ${err}`;
+  }
+}
+
+async function saveStyleKit(name) {
+  name = name.trim();
+  if (!name) return;
+  const kit = { ...structuredClone(doc.theme), id: `kit-${Date.now().toString(36)}`, name };
+  styleKits = [...styleKits.filter((k) => k.name !== name), kit];
+  await persistStyleKits();
+  doc.theme = { ...doc.theme, id: kit.id };
+  renderStyleKits();
+  styleStatus.textContent = `Stilkit „${name}“ gespeichert.`;
+}
+
+async function deleteStyleKit(id) {
+  styleKits = styleKits.filter((k) => k.id !== id);
+  await persistStyleKits();
+  renderStyleKits();
+}
+
+function themeCard(t, onClick) {
+  const b = document.createElement("button");
+  b.className = "theme-card";
+  b.dataset.theme = t.id;
+  b.style.background = t.background;
+  b.style.color = t.text;
+  b.innerHTML = `<span class="tc-title"></span><span class="tc-fonts"></span><span class="tc-bar"><i></i><i></i></span>`;
+  b.querySelector(".tc-title").textContent = t.name;
+  b.querySelector(".tc-fonts").textContent = `${t.fonts?.title ?? "sans"} · ${t.fonts?.body ?? "sans"}`;
+  const [a, a2] = b.querySelectorAll(".tc-bar i");
+  a.style.background = t.accent;
+  a2.style.background = t.accent2 ?? t.accent;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function renderStyleKits() {
+  const box = sidebar.querySelector(".kit-cards");
+  box.replaceChildren(
+    ...styleKits.map((k) => {
+      const card = themeCard(k, () => applyTheme(k));
+      const del = document.createElement("span");
+      del.className = "kit-delete";
+      del.title = "Stilkit löschen";
+      del.textContent = "×";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteStyleKit(k.id);
+      });
+      card.append(del);
+      return card;
+    }),
+  );
+  sidebar.querySelector(".kit-empty").hidden = styleKits.length > 0;
+  updateStylePanel();
+}
+
 function updateStylePanel() {
   const t = doc.theme;
   const bg = doc.background ?? {};
@@ -1355,27 +1526,30 @@ function updateStylePanel() {
     const v = t.fonts?.[role] ?? "sans";
     if (![...sel.options].some((o) => o.value === v)) sel.append(new Option(v, v));
     sel.value = v;
+    sidebar.querySelector(`[data-theme-bold="${role}"]`)?.classList.toggle("on", !!t.bold?.[role]);
+    sidebar.querySelector(`[data-theme-italic="${role}"]`)?.classList.toggle("on", !!t.italic?.[role]);
   }
 }
 
 function buildStylePanel() {
   const panel = sidebar.querySelector('[data-panel="style"]');
   const cards = panel.querySelector(".theme-cards");
-  for (const t of THEMES) {
-    const b = document.createElement("button");
-    b.className = "theme-card";
-    b.dataset.theme = t.id;
-    b.style.background = t.background;
-    b.style.color = t.text;
-    b.innerHTML = `<span class="tc-title"></span><span class="tc-fonts"></span><span class="tc-bar"><i></i><i></i></span>`;
-    b.querySelector(".tc-title").textContent = t.name;
-    b.querySelector(".tc-fonts").textContent = `${t.fonts.title} · ${t.fonts.body}`;
-    const [a, a2] = b.querySelectorAll(".tc-bar i");
-    a.style.background = t.accent;
-    a2.style.background = t.accent2;
-    b.addEventListener("click", () => applyTheme(t));
-    cards.append(b);
+  for (const t of THEMES) cards.append(themeCard(t, () => applyTheme(t)));
+  for (const b of panel.querySelectorAll("[data-theme-bold]")) {
+    b.addEventListener("click", () => toggleThemeStyle(b.dataset.themeBold, "bold"));
   }
+  for (const b of panel.querySelectorAll("[data-theme-italic]")) {
+    b.addEventListener("click", () => toggleThemeStyle(b.dataset.themeItalic, "italic"));
+  }
+  const kitName = panel.querySelector("#kit-name");
+  const saveKit = () => {
+    saveStyleKit(kitName.value);
+    kitName.value = "";
+  };
+  panel.querySelector("#btn-kit-save").addEventListener("click", saveKit);
+  kitName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveKit();
+  });
   for (const inp of panel.querySelectorAll("[data-theme-color]")) {
     inp.addEventListener("change", () => setThemeValue(inp.dataset.themeColor, inp.value));
   }
@@ -1618,6 +1792,7 @@ on("btn-add-to-path", addSelectedToPath);
 on("btn-fade-in", () => addAnimation("fade-in"));
 on("btn-fade-out", () => addAnimation("fade-out"));
 on("btn-bold", toggleBold);
+on("btn-image-bg", imageToBackground);
 on("btn-italic", toggleItalic);
 on("btn-align", cycleAlign);
 on("btn-undo", undo);
@@ -1649,6 +1824,7 @@ doc.fonts ??= [];
 buildSidebar();
 fillFontSelect();
 loadSystemFonts();
+loadStyleKits();
 buildWorld();
 buildPathList();
 updateToolbar();

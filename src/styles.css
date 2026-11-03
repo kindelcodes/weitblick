@@ -320,6 +320,73 @@ body:not(.insertbar-open) .insertbar {
   margin-top: 6px;
 }
 
+.tf-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.insertbar .tf-toggle {
+  width: 26px;
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.insertbar .tf-toggle.on {
+  background: var(--active-bg);
+  color: var(--teal);
+}
+
+.tf-row select {
+  width: 120px !important;
+}
+
+.insertbar .theme-card {
+  position: relative;
+}
+
+.kit-delete {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+.kit-delete:hover {
+  opacity: 1;
+}
+
+.kit-cards:not(:empty) {
+  margin-bottom: 6px;
+}
+
+.kit-save {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.kit-save input {
+  margin: 0 !important;
+}
+
+.insertbar .kit-save .row {
+  padding: 6px 10px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 13px;
+}
+
+.insertbar .kit-save .row:hover {
+  background: var(--orange-dark);
+}
+
 .theme-font select {
   width: 160px;
   height: 30px;
@@ -640,7 +707,36 @@ body.presenting:not(.show-controls) .viewport {
 }
 
 .obj {
+  opacity: var(--alpha, 1);
   transition: opacity 0.5s ease;
+}
+
+/* Vorschau eines Pfadschritts beim Überfahren der Pfadliste */
+.path-preview {
+  position: fixed;
+  z-index: 50;
+  display: none;
+  padding: 4px;
+  background: var(--panel);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.path-preview.visible {
+  display: block;
+}
+
+.path-preview .pp-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 5px;
+  background-size: cover;
+  background-position: center;
+}
+
+.path-preview .world {
+  pointer-events: none;
 }
 
 .obj.anim-hidden {

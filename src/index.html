@@ -67,6 +67,7 @@
         <button id="btn-bold" data-needs="text" title="Fett (Strg+B)"><b>B</b></button>
         <button id="btn-italic" data-needs="text" title="Kursiv (Strg+I)"><i>I</i></button>
         <button id="btn-align" data-needs="text" title="Ausrichtung wechseln">⇤</button>
+        <button id="btn-image-bg" data-needs="image" title="Dieses Bild als Hintergrund der ganzen Präsentation verwenden">▤ Als Hintergrund</button>
         <span class="sep"></span>
         <button id="btn-fade-in" data-needs="any" title="Animationsschritt: beim Präsentieren einblenden (nach dem aktuellen Schritt)">✦ Einblenden</button>
         <button id="btn-fade-out" data-needs="any" title="Animationsschritt: beim Präsentieren ausblenden (nach dem aktuellen Schritt)">✧ Ausblenden</button>
@@ -123,9 +124,16 @@
           <label>Akzent <input type="color" data-theme-color="accent" /></label>
           <label>Akzent 2 <input type="color" data-theme-color="accent2" /></label>
         </div>
-        <label class="theme-font">Titel <select class="font-select" data-theme-font="title"></select></label>
-        <label class="theme-font">Untertitel <select class="font-select" data-theme-font="subtitle"></select></label>
-        <label class="theme-font">Text <select class="font-select" data-theme-font="body"></select></label>
+        <div class="theme-font">Titel <span class="tf-row"><select class="font-select" data-theme-font="title"></select><button class="tf-toggle" data-theme-bold="title" title="Titel fett"><b>B</b></button><button class="tf-toggle" data-theme-italic="title" title="Titel kursiv"><i>I</i></button></span></div>
+        <div class="theme-font">Untertitel <span class="tf-row"><select class="font-select" data-theme-font="subtitle"></select><button class="tf-toggle" data-theme-bold="subtitle" title="Untertitel fett"><b>B</b></button><button class="tf-toggle" data-theme-italic="subtitle" title="Untertitel kursiv"><i>I</i></button></span></div>
+        <div class="theme-font">Text <span class="tf-row"><select class="font-select" data-theme-font="body"></select><button class="tf-toggle" data-theme-bold="body" title="Text fett"><b>B</b></button><button class="tf-toggle" data-theme-italic="body" title="Text kursiv"><i>I</i></button></span></div>
+        <h4>Meine Stilkits</h4>
+        <p class="note kit-empty">Noch keine. Stelle oben Farben und Schriften ein und speichere sie als eigenes Kit, es steht dann in jeder Präsentation bereit.</p>
+        <div class="theme-cards kit-cards"></div>
+        <div class="kit-save">
+          <input id="kit-name" type="text" placeholder="Name des Stilkits" />
+          <button class="row" id="btn-kit-save">Speichern</button>
+        </div>
         <div class="style-status note"></div>
       </div>
       <div data-panel="shapes"></div>
