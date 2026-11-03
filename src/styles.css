@@ -1194,3 +1194,8 @@ body.resizing * {
   color: var(--teal);
   font-weight: 700;
 }
+
+body.busy,
+body.busy * {
+  cursor: progress !important;
+}

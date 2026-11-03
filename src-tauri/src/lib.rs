@@ -182,6 +182,67 @@ async fn google_font(app: tauri::AppHandle, family: String) -> Result<Vec<FontFa
     Ok(faces)
 }
 
+// Ein Eintrag in einem ZIP-Paket (z. B. PowerPoint): Text für XML-Teile, sonst Base64.
+#[derive(Serialize, Deserialize)]
+struct ZipEntry {
+    name: String,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    data: Option<String>,
+}
+
+fn is_text_part(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.ends_with(".xml") || n.ends_with(".rels")
+}
+
+// Schreibt ein ZIP-Paket (für den PowerPoint-Export); erst in eine Nachbardatei, dann umbenennen.
+#[tauri::command]
+fn write_zip(path: String, entries: Vec<ZipEntry>) -> Result<(), String> {
+    let tmp = format!("{path}.tmp");
+    let file = File::create(&tmp).map_err(|e| format!("Datei kann nicht angelegt werden: {e}"))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    for e in entries {
+        if e.name.contains("..") || e.name.starts_with('/') {
+            return Err(format!("Ungültiger Name im Paket: {}", e.name));
+        }
+        let bytes = match (e.text, e.data) {
+            (Some(t), _) => t.into_bytes(),
+            (None, Some(d)) => STANDARD.decode(d).map_err(|e| e.to_string())?,
+            _ => Vec::new(),
+        };
+        zip.start_file(e.name, options).map_err(|e| e.to_string())?;
+        zip.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
+    zip.finish().map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+}
+
+// Liest ein ZIP-Paket (für den PowerPoint-Import): XML als Text, alles andere als Base64.
+#[tauri::command]
+fn read_zip(path: String) -> Result<Vec<ZipEntry>, String> {
+    let file = File::open(&path).map_err(|e| format!("Datei kann nicht geöffnet werden: {e}"))?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|_| "Das ist keine gültige PowerPoint-Datei (.pptx).".to_string())?;
+    let mut out = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
+        if !entry.is_file() {
+            continue;
+        }
+        let name = entry.name().to_string();
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+        if is_text_part(&name) {
+            out.push(ZipEntry { name, text: Some(String::from_utf8_lossy(&bytes).into_owned()), data: None });
+        } else {
+            out.push(ZipEntry { name, text: None, data: Some(STANDARD.encode(bytes)) });
+        }
+    }
+    Ok(out)
+}
+
 // Eigene Stilkits gelten für alle Präsentationen und liegen deshalb im App-Datenordner.
 fn style_kits_file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
@@ -226,7 +287,9 @@ pub fn run() {
             system_fonts,
             google_font,
             load_style_kits,
-            save_style_kits
+            save_style_kits,
+            write_zip,
+            read_zip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,6 +3,7 @@ import { demo } from "./demo.js";
 import { SHAPES, SHAPE_GROUPS, shapeSvg } from "./shapes.js";
 import { DIAGRAMS } from "./diagrams.js";
 import { THEMES, ROLES } from "./themes.js";
+import { buildPptx, importPptx } from "./pptx.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
@@ -1540,8 +1541,96 @@ async function save() {
 
 async function openFile() {
   if (!(await confirmDiscard())) return;
-  const path = await tauri.dialog.open({ filters: FILTERS, multiple: false });
-  if (path) await openPath(path);
+  const path = await tauri.dialog.open({
+    multiple: false,
+    filters: [
+      { name: "Weitblick oder PowerPoint", extensions: ["weitblick", "pptx"] },
+      ...FILTERS,
+      { name: "PowerPoint-Präsentation", extensions: ["pptx"] },
+    ],
+  });
+  if (!path) return;
+  if (path.toLowerCase().endsWith(".pptx")) await importPptxPath(path);
+  else await openPath(path);
+}
+
+// ---------- PowerPoint ----------
+
+// Das Rechteck, auf das die Kamera bei Schritt i blickt (bei Animationsschritten das davor).
+function stepRect(i) {
+  let k = i;
+  while (k > 0 && isAnim(doc.path[k])) k--;
+  return byId.get(doc.path[k]);
+}
+
+async function exportPptx(morph) {
+  if (isEditing()) document.activeElement.blur();
+  const base = (currentPath?.split(/[\\/]/).pop() ?? `${doc.title}.weitblick`).replace(/\.weitblick$/i, "");
+  const path = await tauri.dialog.save({ filters: [{ name: "PowerPoint-Präsentation", extensions: ["pptx"] }], defaultPath: `${base}.pptx` });
+  if (!path) return;
+  const target = path.toLowerCase().endsWith(".pptx") ? path : `${path}.pptx`;
+  const steps = doc.path.map((_, i) => ({ rect: stepRect(i), hidden: hiddenAt(i) })).filter((s) => s.rect);
+  try {
+    document.body.classList.add("busy");
+    const entries = await buildPptx({
+      doc,
+      media,
+      steps,
+      morph,
+      aspect: aspectRatio(),
+      textFont,
+      textWeight,
+      textItalic,
+      cornerRadius,
+      hasCorners,
+      shapeSvg,
+      iconSvg,
+    });
+    await tauri.core.invoke("write_zip", { path: target, entries });
+    await tauri.dialog.message(
+      `${steps.length} Folien exportiert${morph ? " mit Morph-Übergängen (PowerPoint 2019/365)" : ""}.`,
+      { title: "PowerPoint-Export", kind: "info" },
+    );
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Export fehlgeschlagen", kind: "error" });
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+async function importPptxPath(path) {
+  try {
+    document.body.classList.add("busy");
+    const entries = await tauri.core.invoke("read_zip", { path });
+    const title = path.split(/[\\/]/).pop().replace(/\.pptx$/i, "");
+    const result = importPptx(entries, title, structuredClone(demo.theme));
+    // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
+    loadDocument(result.doc, null, result.media);
+    savedSnapshot = null;
+    showFileName();
+    const notes = result.skipped.length ? `\n\nNicht oder nur vereinfacht übernommen:\n– ${result.skipped.join("\n– ")}` : "";
+    await tauri.dialog.message(`${result.slides} Folien als Rahmen auf die Leinwand gelegt.${notes}`, { title: "PowerPoint-Import", kind: "info" });
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Import fehlgeschlagen", kind: "error" });
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+function showExportMenu() {
+  const b = document.getElementById("btn-export").getBoundingClientRect();
+  buildMenu(
+    [
+      { label: "PowerPoint mit Morph-Übergängen …", run: () => exportPptx(true) },
+      { label: "PowerPoint klassisch …", run: () => exportPptx(false) },
+      "-",
+      { label: "PowerPoint importieren …", run: openFile },
+    ],
+    ctxMenu,
+  );
+  ctxMenu.classList.add("open");
+  ctxMenu.style.left = `${Math.min(b.left, innerWidth - ctxMenu.offsetWidth - 4)}px`;
+  ctxMenu.style.top = `${b.bottom + 4}px`;
 }
 
 async function openPath(path) {
@@ -2481,6 +2570,8 @@ on("btn-zoom-out", () => zoomAt(1 / ZOOM_STEP, ...center()));
 on("btn-add-text", () => addObject("text"));
 on("btn-add-frame", () => addObject("frame"));
 on("btn-new", newDocument);
+document.getElementById("btn-export").addEventListener("pointerdown", (e) => e.stopPropagation());
+on("btn-export", showExportMenu);
 on("btn-grid", toggleGrid);
 viewport.classList.toggle("grid-on", gridOn);
 document.getElementById("btn-grid").classList.toggle("on", gridOn);
