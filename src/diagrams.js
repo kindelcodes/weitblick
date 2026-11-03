@@ -19,6 +19,11 @@ function line(x1, y1, x2, y2, thickness, fill) {
   return { ...box((x1 + x2) / 2, (y1 + y2) / 2, len, thickness, fill), rot };
 }
 
+// Teil eines Unterschritts im Pfad: alle Teile mit gleichem Namen bekommen zusammen einen Schritt.
+function st(o, key) {
+  return { ...o, step: key };
+}
+
 // Einzeiliger Text mittig in einer Box (h der Box wird nur für die Lesbarkeit der Aufrufe mitgegeben).
 function boxText(x, y, w, _h, text, size, color, extra = {}) {
   return label(x, y, w * 0.9, size * 1.4, text, size, color, extra);
@@ -35,8 +40,8 @@ export const DIAGRAMS = [
       const step = 3.6 * u;
       for (let i = 0; i < n; i++) {
         const x = (i - (n - 1) / 2) * step;
-        out.push(box(x, 0, w, 1.5 * u, t.accent));
-        out.push(boxText(x, 0, w, 1.5 * u, `Schritt ${i + 1}`, 0.4 * u, DARK));
+        out.push(st(box(x, 0, w, 1.5 * u, t.accent), `Schritt ${i + 1}`));
+        out.push(st(boxText(x, 0, w, 1.5 * u, `Schritt ${i + 1}`, 0.4 * u, DARK), `Schritt ${i + 1}`));
         if (i < n - 1) out.push(box(x + step / 2, 0, 0.6 * u, 0.5 * u, t.text, "arrow"));
       }
       return out;
@@ -54,8 +59,8 @@ export const DIAGRAMS = [
         const am = ((-90 + (360 / n) * (i + 0.5)) * Math.PI) / 180;
         const x = r * Math.cos(a);
         const y = r * Math.sin(a);
-        out.push(box(x, y, 2 * u, 2 * u, t.accent, "ellipse"));
-        out.push(boxText(x, y, 2 * u, 2 * u, `Phase ${i + 1}`, 0.36 * u, DARK));
+        out.push(st(box(x, y, 2 * u, 2 * u, t.accent, "ellipse"), `Phase ${i + 1}`));
+        out.push(st(boxText(x, y, 2 * u, 2 * u, `Phase ${i + 1}`, 0.36 * u, DARK), `Phase ${i + 1}`));
         const arrow = box(r * 0.95 * Math.cos(am), r * 0.95 * Math.sin(am), 0.6 * u, 0.45 * u, t.text, "arrow");
         arrow.rot = (am * 180) / Math.PI + 90;
         out.push(arrow);
@@ -71,10 +76,11 @@ export const DIAGRAMS = [
       const n = 5;
       for (let i = 0; i < n; i++) {
         const x = (i - (n - 1) / 2) * 3.2 * u;
-        out.push(box(x, 0, 0.5 * u, 0.5 * u, t.accent, "ellipse"));
+        const k = `Ereignis ${i + 1}`;
+        out.push(st(box(x, 0, 0.5 * u, 0.5 * u, t.accent, "ellipse"), k));
         const y = i % 2 ? 1.1 * u : -1.1 * u;
-        out.push(label(x, y, 2.8 * u, 0.6 * u, `Ereignis ${i + 1}`, 0.36 * u, t.text));
-        out.push(label(x, y + (i % 2 ? 0.55 : -0.55) * u, 2.8 * u, 0.5 * u, `Jahr ${2020 + i}`, 0.26 * u, t.accent));
+        out.push(st(label(x, y, 2.8 * u, 0.6 * u, k, 0.36 * u, t.text), k));
+        out.push(st(label(x, y + (i % 2 ? 0.55 : -0.55) * u, 2.8 * u, 0.5 * u, `Jahr ${2020 + i}`, 0.26 * u, t.accent), k));
       }
       return out;
     },
@@ -120,8 +126,8 @@ export const DIAGRAMS = [
       out.push(box(0, 0, 3 * u, 1.8 * u, t.accent, "ellipse"));
       out.push(boxText(0, 0, 3 * u, 1.8 * u, "Thema", 0.5 * u, DARK));
       for (const [x, y, i] of items) {
-        out.push(box(x, y, 2.4 * u, 1 * u, t.background === DARK ? "#2a2c33" : "#e3e5ea"));
-        out.push(boxText(x, y, 2.4 * u, 1 * u, `Idee ${i + 1}`, 0.34 * u, t.text));
+        out.push(st(box(x, y, 2.4 * u, 1 * u, t.background === DARK ? "#2a2c33" : "#e3e5ea"), `Idee ${i + 1}`));
+        out.push(st(boxText(x, y, 2.4 * u, 1 * u, `Idee ${i + 1}`, 0.34 * u, t.text), `Idee ${i + 1}`));
       }
       return out;
     },
@@ -288,10 +294,11 @@ DIAGRAMS.push(
       const out = [];
       for (let i = 0; i < 4; i++) {
         const x = (i - 1.5) * 3 * u;
-        out.push(box(x, -0.8 * u, 2 * u, 2 * u, t.accent, "ellipse"));
-        out.push({ type: "icon", name: "user", x: x - 0.6 * u, y: -1.4 * u, w: 1.2 * u, h: 1.2 * u, color: DARK });
-        out.push(label(x, 0.75 * u, 2.8 * u, 0.6 * u, `Name ${i + 1}`, 0.38 * u, t.text, { weight: 700 }));
-        out.push(label(x, 1.35 * u, 2.8 * u, 0.5 * u, "Rolle", 0.3 * u, t.accent));
+        const k = `Name ${i + 1}`;
+        out.push(st(box(x, -0.8 * u, 2 * u, 2 * u, t.accent, "ellipse"), k));
+        out.push(st({ type: "icon", name: "user", x: x - 0.6 * u, y: -1.4 * u, w: 1.2 * u, h: 1.2 * u, color: DARK }, k));
+        out.push(st(label(x, 0.75 * u, 2.8 * u, 0.6 * u, k, 0.38 * u, t.text, { weight: 700 }), k));
+        out.push(st(label(x, 1.35 * u, 2.8 * u, 0.5 * u, "Rolle", 0.3 * u, t.accent), k));
       }
       return out;
     },

@@ -1506,9 +1506,12 @@ function iconSvg(name) {
 }
 
 // Fertige Objekte (ohne id) um die Bildmitte herum einfügen und auswählen, als ein Rückgängig-Schritt.
-function insertObjects(items) {
+// at: Mittelpunkt auf der Leinwand, sonst die Bildmitte.
+function insertObjects(items, at = null) {
   checkpoint();
-  const added = items.map((o) => ({ ...o, id: newId(o.type[0]), x: o.x + camera.cx, y: o.y + camera.cy }));
+  const cx = at?.x ?? camera.cx;
+  const cy = at?.y ?? camera.cy;
+  const added = items.map((o) => ({ ...o, id: newId(o.type[0]), x: o.x + cx, y: o.y + cy }));
   doc.objects.push(...added);
   buildWorld();
   setSelection(added);
@@ -1528,10 +1531,12 @@ function insertDiagram(id) {
     const g = `g-${Date.now().toString(36)}`;
     items = items.map((o) => ({ ...o, group: g }));
   }
-  insertObjects(items);
+  insertObjects(items, freeSpot(items));
   const added = [...selection];
-  frameAndAddToPath(added, d.label);
+  const frame = frameAndAddToPath(added, d.label);
   addSubSteps(added);
+  // Liegt der neue Block neben dem Bild, dorthin fliegen.
+  if (frame) camera.flyTo(frameState(frame.id));
   setSelection(added.filter((o) => byId.has(o.id)).flatMap((o) => (o.group ? groupOf(o) : [o])).filter((o, i, a) => a.indexOf(o) === i));
 }
 
@@ -1595,8 +1600,50 @@ function frameAndAddToPath(items, title) {
   for (const o of items) o.frame = f.id;
   // Rahmen hinter alles andere, damit der Inhalt klickbar bleibt.
   doc.objects.splice(1, 0, f);
+  growOverview(f);
   buildWorld();
   addToPath(f.id);
+  return f;
+}
+
+// Der Überblick (erster Pfadschritt) soll alles zeigen: liegt etwas außerhalb, wächst er mit.
+function growOverview(r) {
+  const ov = byId.get(doc.path[0]);
+  if (!ov?.hidden || inside(r, ov)) return;
+  const pad = Math.max(r.w, r.h) * 0.1;
+  const x1 = Math.min(ov.x, r.x - pad);
+  const y1 = Math.min(ov.y, r.y - pad);
+  const x2 = Math.max(ov.x + ov.w, r.x + r.w + pad);
+  const y2 = Math.max(ov.y + ov.h, r.y + r.h + pad);
+  Object.assign(ov, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
+}
+
+// Einen freien Platz für neue Inhalte suchen: erst die Bildmitte, dann ringsum in Schritten
+// der Blockgröße. Belegt ist, was sichtbare Objekte (außer dem Überblick) überdecken.
+function freeSpot(items) {
+  const x1 = Math.min(...items.map((o) => o.x));
+  const y1 = Math.min(...items.map((o) => o.y));
+  const w = Math.max(...items.map((o) => o.x + o.w)) - x1;
+  const h = Math.max(...items.map((o) => o.y + o.h)) - y1;
+  const pad = Math.max(w, h) * 0.15;
+  const taken = doc.objects.filter((o) => !o.hidden);
+  const free = (cx, cy) => {
+    const r = { x: cx + x1 - pad, y: cy + y1 - pad, w: w + 2 * pad, h: h + 2 * pad };
+    return !taken.some((o) => o.x < r.x + r.w && o.x + o.w > r.x && o.y < r.y + r.h && o.y + o.h > r.y);
+  };
+  const sx = w + 2 * pad;
+  const sy = h + 2 * pad;
+  for (let ring = 0; ring <= 4; ring++) {
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue;
+        const cx = camera.cx + i * sx;
+        const cy = camera.cy + j * sy;
+        if (free(cx, cy)) return { x: cx, y: cy };
+      }
+    }
+  }
+  return null;
 }
 
 // ---------- Schriften ----------
