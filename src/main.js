@@ -294,7 +294,12 @@ function positionContextBar() {
 }
 
 // Beim Verschieben, Drehen oder Größeändern mitwandern (nach dem eigentlichen Zeiger-Handler).
-viewport.addEventListener("pointermove", () => requestAnimationFrame(positionContextBar));
+viewport.addEventListener("pointermove", () =>
+  requestAnimationFrame(() => {
+    updateGroupBox();
+    positionContextBar();
+  }),
+);
 
 // ---------- Hintergrund ----------
 // doc.background = { src, fit: "cover" | "contain" | "tile", parallax }; das Bild liegt unter media/.
@@ -652,6 +657,36 @@ function groupOf(o) {
   return o.group ? doc.objects.filter((p) => p.group === o.group) : [o];
 }
 
+// Ist genau eine ganze Gruppe ausgewählt? Dann zeigt ein gestrichelter Kasten sie als einen Block,
+// mit einem Anfasser zum gemeinsamen Skalieren.
+function selectedGroup() {
+  const g = selection[0]?.group;
+  if (!g || !selection.every((o) => o.group === g)) return null;
+  return groupOf(selection[0]).length === selection.length ? g : null;
+}
+
+function selectionBox() {
+  const x1 = Math.min(...selection.map((o) => o.x));
+  const y1 = Math.min(...selection.map((o) => o.y));
+  const x2 = Math.max(...selection.map((o) => o.x + o.w));
+  const y2 = Math.max(...selection.map((o) => o.y + o.h));
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+
+const groupBox = document.createElement("div");
+groupBox.className = "group-box";
+groupBox.innerHTML = `<div class="handle group-handle"></div>`;
+
+function updateGroupBox() {
+  const on = !!selectedGroup() && !presenting;
+  // Bei einer ganzen Gruppe nur den gemeinsamen Kasten zeigen, nicht jeden Teil einzeln umranden.
+  world.classList.toggle("group-mode", on);
+  if (!on) return groupBox.remove();
+  const b = selectionBox();
+  Object.assign(groupBox.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
+  if (groupBox.parentNode !== world) world.append(groupBox);
+}
+
 function groupSelection() {
   const items = selection.filter((o) => !o.hidden);
   if (items.length < 2) return;
@@ -675,6 +710,7 @@ function setSelection(list) {
   selected = list.at(-1) ?? null;
   for (const p of new Set([...prev, ...list])) if (byId.has(p.id)) updateEl(p);
   markFrameMembers();
+  updateGroupBox();
   updateToolbar();
 }
 
@@ -776,7 +812,7 @@ function inAnyFrame(o) {
 // ---------- Abgerundete Ecken ----------
 // radius: 0..50 (Prozent der kürzeren Seite). Das abgerundete Rechteck startet bei 12.
 
-const NO_CORNERS = new Set(["ellipse", "half-circle", "cylinder", "cloud", "heart", "drop", "moon", "bubble-round", "world", "pin"]);
+const NO_CORNERS = new Set(["ellipse", "half-circle", "cylinder", "ring", "cloud", "heart", "drop", "moon", "bubble-round", "world", "pin"]);
 
 function cornerRadius(o) {
   return o.radius ?? (o.shape === "rounded" ? 12 : 0);
@@ -1167,7 +1203,15 @@ viewport.addEventListener("pointerdown", (e) => {
   const start = eventToWorld(e);
 
   if (e.button === 0 && e.target.classList.contains("handle") && selected) {
-    gesture = { kind: "resize", start, o: selected, w: selected.w, h: selected.h, before: snapshot() };
+    gesture = e.target.classList.contains("group-handle")
+      ? {
+          kind: "group-resize",
+          start,
+          box: selectionBox(),
+          items: selection.map((p) => ({ p, x: p.x, y: p.y, w: p.w, h: p.h, size: p.size })),
+          before: snapshot(),
+        }
+      : { kind: "resize", start, o: selected, w: selected.w, h: selected.h, before: snapshot() };
   } else if (e.button === 0 && e.target.classList.contains("rot-handle") && selected) {
     const o = selected;
     gesture = { kind: "rotate", o, center: { x: o.x + o.w / 2, y: o.y + o.h / 2 }, before: snapshot() };
@@ -1242,6 +1286,21 @@ viewport.addEventListener("pointermove", (e) => {
       it.p.y = it.y + dy;
       updateEl(it.p);
     }
+  } else if (gesture.kind === "group-resize") {
+    // Gleichmäßig um die linke obere Ecke der Gruppe skalieren, Schriften wachsen mit.
+    const g = gesture;
+    const f = Math.max(0.05, (g.box.w + dx) / g.box.w);
+    for (const it of g.items) {
+      Object.assign(it.p, {
+        x: g.box.x + (it.x - g.box.x) * f,
+        y: g.box.y + (it.y - g.box.y) * f,
+        w: it.w * f,
+        h: it.h * f,
+      });
+      if (it.size) it.p.size = it.size * f;
+      updateEl(it.p);
+    }
+    updateGroupBox();
   } else {
     const o = gesture.o;
     const minSize = 4 / zoom();
@@ -1457,7 +1516,14 @@ function insertIcon(name) {
 
 function insertDiagram(id) {
   const d = DIAGRAMS.find((x) => x.id === id);
-  if (d) insertObjects(d.build(camera.w / 16, doc.theme));
+  if (!d) return;
+  let items = d.build(camera.w / 16, doc.theme);
+  // Blöcke wie der Planet gelten als ein Stück: alle Teile in eine Gruppe.
+  if (d.group) {
+    const g = `g-${Date.now().toString(36)}`;
+    items = items.map((o) => ({ ...o, group: g }));
+  }
+  insertObjects(items);
 }
 
 // ---------- Schriften ----------

@@ -69,6 +69,8 @@ const PATHS = {
   moon: "M62,2 C38,8 22,28 22,52 C22,76 40,96 64,99 C58,100 52,100 48,100 C21,98 0,76 0,50 C0,22 23,0 50,0 C54,0 58,1 62,2 Z",
   gear: gear(),
   world: WORLD_PATH,
+  // Schmaler Ring (Umlaufbahn): äußerer Kreis minus innerer Kreis.
+  ring: "M50,0 A50,50 0 1,0 50,100 A50,50 0 1,0 50,0 Z M50,2.5 A47.5,47.5 0 1,1 50,97.5 A47.5,47.5 0 1,1 50,2.5 Z",
   pin: "M50,100 C50,100 12,58 12,36 C12,15 29,0 50,0 C71,0 88,15 88,36 C88,58 50,100 50,100 Z M50,22 A14,14 0 1,0 50,50 A14,14 0 1,0 50,22 Z",
   puzzle: "M0,20 H32 C30,8 36,0 45,0 C54,0 60,8 58,20 H80 V42 C92,40 100,46 100,55 C100,64 92,70 80,68 V100 H0 V72 C10,74 18,68 18,59 C18,50 10,44 0,46 Z",
 };
@@ -117,6 +119,7 @@ export const SHAPE_GROUPS = [
   {
     title: "Akzente",
     shapes: [
+      { id: "ring", label: "Ring" },
       { id: "star", label: "Stern" },
       { id: "sparkle", label: "Funkeln" },
       { id: "burst", label: "Zacken" },

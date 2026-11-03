@@ -298,6 +298,35 @@ DIAGRAMS.push(
   },
 );
 
+// Planet mit Monden: eine große Kugel, eine Umlaufbahn und Monde darauf. group: true heißt,
+// dass alle Teile nach dem Einfügen eine Gruppe bilden und als ein Block gelten.
+DIAGRAMS.push({
+  id: "planet",
+  label: "Planet mit Monden",
+  group: true,
+  build(u, t) {
+    const out = [];
+    const rx = 5.6 * u;
+    const ry = 2.4 * u;
+    const moonColor = t.accent2 ?? shade(t.accent, 0.4);
+    out.push({ ...box(0, 0, rx * 2, ry * 2, t.text, "ring"), opacity: 0.45 });
+    out.push(box(0, 0, 3.6 * u, 3.6 * u, t.accent, "ellipse"));
+    // Ein heller Fleck oben links lässt die Kugel räumlich wirken.
+    out.push({ ...box(-0.7 * u, -0.75 * u, 1.3 * u, 1.1 * u, "#ffffff", "ellipse"), opacity: 0.22 });
+    out.push(boxText(0, 0, 3.6 * u, 3.6 * u, "Thema", 0.55 * u, DARK, { weight: 700, role: "title" }));
+    const moons = [[-150, "Mond 1"], [-60, "Mond 2"], [20, "Mond 3"], [120, "Mond 4"]];
+    for (const [deg, name] of moons) {
+      const a = (deg * Math.PI) / 180;
+      const x = rx * Math.cos(a);
+      const y = ry * Math.sin(a);
+      out.push(box(x, y, 1.2 * u, 1.2 * u, moonColor, "ellipse"));
+      const below = y >= 0;
+      out.push(label(x, y + (below ? 1.05 : -1.05) * u, 2.6 * u, 0.6 * u, name, 0.36 * u, t.text, { weight: 700 }));
+    }
+    return out;
+  },
+});
+
 // Farbe aufhellen (amount 0..1), für abgestufte Flächen.
 function shade(hex, amount) {
   const n = parseInt(hex.slice(1), 16);

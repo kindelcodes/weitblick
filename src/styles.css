@@ -667,6 +667,31 @@ body:not(.insertbar-open) .insertbar {
   accent-color: var(--orange);
 }
 
+/* Ausgewählte Gruppe als ein Block, mit Anfasser zum gemeinsamen Skalieren */
+.group-box {
+  position: absolute;
+  outline: calc(1.5px * var(--inv, 1)) dashed var(--orange);
+  outline-offset: calc(8px * var(--inv, 1));
+  pointer-events: none;
+}
+
+.world.group-mode .obj.selected {
+  outline: none;
+}
+
+.group-box .handle {
+  position: absolute;
+  right: calc(-15px * var(--inv, 1));
+  bottom: calc(-15px * var(--inv, 1));
+  width: calc(14px * var(--inv, 1));
+  height: calc(14px * var(--inv, 1));
+  background: var(--orange);
+  border: calc(2px * var(--inv, 1)) solid #fff;
+  border-radius: 3px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
 .obj.frame-member {
   outline: calc(1.5px * var(--inv, 1)) dashed var(--frame);
   outline-offset: calc(3px * var(--inv, 1));
