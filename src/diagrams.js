@@ -319,9 +319,10 @@ DIAGRAMS.push({
       const a = (deg * Math.PI) / 180;
       const x = rx * Math.cos(a);
       const y = ry * Math.sin(a);
-      out.push(box(x, y, 1.2 * u, 1.2 * u, moonColor, "ellipse"));
+      // step: Mond und Beschriftung bilden einen eigenen Unterschritt im Pfad.
+      out.push({ ...box(x, y, 1.2 * u, 1.2 * u, moonColor, "ellipse"), step: name });
       const below = y >= 0;
-      out.push(label(x, y + (below ? 1.05 : -1.05) * u, 2.6 * u, 0.6 * u, name, 0.36 * u, t.text, { weight: 700 }));
+      out.push(label(x, y + (below ? 1.05 : -1.05) * u, 2.6 * u, 0.6 * u, name, 0.36 * u, t.text, { weight: 700, step: name }));
     }
     return out;
   },

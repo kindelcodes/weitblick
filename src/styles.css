@@ -828,6 +828,17 @@ body.presenting:not(.show-controls) .viewport {
   text-align: center;
 }
 
+#path-list li.sub {
+  padding-left: 24px;
+  font-size: 13px;
+}
+
+#path-list li.sub .num {
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
 #path-list li.anim {
   padding-left: 24px;
   font-size: 13px;

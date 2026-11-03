@@ -394,6 +394,7 @@ function buildPathList() {
     li.querySelector(".num").textContent = id === doc.path[0] ? "⌂" : i;
     li.querySelector(".label").textContent = isAnim(id) ? animLabel(id) : (stepLabel(byId.get(id)) ?? id);
     li.classList.toggle("anim", isAnim(id));
+    li.classList.toggle("sub", !isAnim(id) && !!byId.get(id)?.sub);
     li.addEventListener("mouseenter", () => showPathPreview(li, i));
     li.addEventListener("mouseleave", hidePathPreview);
     li.addEventListener("click", (e) => {
@@ -666,10 +667,13 @@ function selectedGroup() {
 }
 
 function selectionBox() {
-  const x1 = Math.min(...selection.map((o) => o.x));
-  const y1 = Math.min(...selection.map((o) => o.y));
-  const x2 = Math.max(...selection.map((o) => o.x + o.w));
-  const y2 = Math.max(...selection.map((o) => o.y + o.h));
+  // Unsichtbare Unterschritt-Rahmen nicht mitzählen, sonst wirkt der Kasten zu groß.
+  const shown = selection.filter((o) => !o.hidden);
+  const list = shown.length ? shown : selection;
+  const x1 = Math.min(...list.map((o) => o.x));
+  const y1 = Math.min(...list.map((o) => o.y));
+  const x2 = Math.max(...list.map((o) => o.x + o.w));
+  const y2 = Math.max(...list.map((o) => o.y + o.h));
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 
@@ -721,7 +725,8 @@ function selectAll() {
 // Was gehört zu einem Rahmen? Ein Objekt mit Eintrag „frame“ gehört fest zu diesem Rahmen
 // (null: ausdrücklich zu keinem); ohne Eintrag zählt, ob es ganz im Rahmen liegt.
 function membersOf(f) {
-  return doc.objects.filter((p) => p !== f && !p.hidden && (p.frame !== undefined ? p.frame === f.id : inside(p, f)));
+  // Unsichtbare Unterschritt-Rahmen zählen mit, wenn sie fest zugeordnet sind; der Überblick nie.
+  return doc.objects.filter((p) => p !== f && (p.frame !== undefined ? p.frame === f.id : !p.hidden && inside(p, f)));
 }
 
 // Rahmen nehmen ihren Inhalt mit (beim Verschieben und Kopieren).
@@ -1524,7 +1529,47 @@ function insertDiagram(id) {
     items = items.map((o) => ({ ...o, group: g }));
   }
   insertObjects(items);
-  frameAndAddToPath(selection, d.label);
+  const added = [...selection];
+  frameAndAddToPath(added, d.label);
+  addSubSteps(added);
+  setSelection(added.filter((o) => byId.has(o.id)).flatMap((o) => (o.group ? groupOf(o) : [o])).filter((o, i, a) => a.indexOf(o) === i));
+}
+
+// Teile mit gleichem „step“ (z. B. ein Mond samt Beschriftung) bekommen je einen unsichtbaren Rahmen,
+// der als Unterschritt in den Pfad kommt. Die Rahmen gehören zur Gruppe des Blocks und wandern mit.
+function addSubSteps(items) {
+  const keys = [...new Set(items.map((o) => o.step).filter(Boolean))];
+  for (const key of keys) {
+    const parts = items.filter((o) => o.step === key);
+    const x1 = Math.min(...parts.map((o) => o.x));
+    const y1 = Math.min(...parts.map((o) => o.y));
+    const x2 = Math.max(...parts.map((o) => o.x + o.w));
+    const y2 = Math.max(...parts.map((o) => o.y + o.h));
+    const pad = Math.max(x2 - x1, y2 - y1) * 0.25;
+    let w = x2 - x1 + 2 * pad;
+    let h = y2 - y1 + 2 * pad;
+    const ratio = aspectRatio();
+    if (w / h < ratio) w = h * ratio;
+    else h = w / ratio;
+    const f = {
+      id: newId("f"),
+      type: "frame",
+      hidden: true,
+      sub: true,
+      title: key,
+      x: (x1 + x2) / 2 - w / 2,
+      y: (y1 + y2) / 2 - h / 2,
+      w,
+      h,
+      frame: parts[0].frame,
+      ...(parts[0].group ? { group: parts[0].group } : {}),
+    };
+    doc.objects.splice(1, 0, f);
+    byId.set(f.id, f);
+    addToPath(f.id);
+  }
+  for (const o of items) delete o.step;
+  buildWorld();
 }
 
 // Um frisch eingefügte Inhalte einen Rahmen im Seitenverhältnis der Präsentation legen und ihn
@@ -1552,7 +1597,6 @@ function frameAndAddToPath(items, title) {
   doc.objects.splice(1, 0, f);
   buildWorld();
   addToPath(f.id);
-  setSelection(items);
 }
 
 // ---------- Schriften ----------
