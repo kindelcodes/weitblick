@@ -33,12 +33,16 @@ body {
 
 body {
   display: grid;
-  grid-template-columns: 220px 1fr 0;
+  --left-w: 220px;
+  --right-w: 280px;
+  --right-cur: 0px;
+  grid-template-columns: var(--left-w) 1fr 0;
   grid-template-rows: 48px 1fr;
 }
 
 body.insertbar-open {
-  grid-template-columns: 220px 1fr 280px;
+  --right-cur: var(--right-w);
+  grid-template-columns: var(--left-w) 1fr var(--right-w);
 }
 
 .topbar {
@@ -1077,7 +1081,7 @@ body:not(.presenting) .viewport.has-bg-image {
 
 .navbar {
   position: fixed;
-  left: calc(50% + 110px);
+  left: calc(var(--left-w) + (100% - var(--left-w) - var(--right-cur)) / 2);
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
@@ -1116,4 +1120,38 @@ body:not(.presenting) .viewport.has-bg-image {
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-size: 14px;
+}
+
+/* Ziehleisten zum Ändern der Breite der Seitenleisten */
+.splitter {
+  position: fixed;
+  top: 51px;
+  bottom: 0;
+  width: 8px;
+  z-index: 20;
+  cursor: col-resize;
+}
+
+.splitter.left {
+  left: calc(var(--left-w) - 4px);
+}
+
+.splitter.right {
+  right: calc(var(--right-w) - 4px);
+}
+
+.splitter:hover,
+.splitter.dragging {
+  background: linear-gradient(90deg, transparent 3px, var(--orange) 3px, var(--orange) 5px, transparent 5px);
+}
+
+body:not(.insertbar-open) .splitter.right,
+body.presenting .splitter {
+  display: none;
+}
+
+body.resizing,
+body.resizing * {
+  cursor: col-resize !important;
+  user-select: none;
 }

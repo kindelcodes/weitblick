@@ -1924,6 +1924,53 @@ function buildSidebar() {
   showTab("style");
 }
 
+// ---------- Breite der Seitenleisten ----------
+// Ziehen an der Kante ändert die Breite; sie wird pro Rechner gemerkt (nur eine Bequemlichkeit).
+
+const PANEL_LIMITS = { left: [150, 480, 220], right: [240, 560, 280] };
+
+function setPanelWidth(side, px) {
+  const [min, max] = PANEL_LIMITS[side];
+  const w = Math.round(clamp(px, min, Math.min(max, innerWidth * 0.45)));
+  document.body.style.setProperty(side === "left" ? "--left-w" : "--right-w", `${w}px`);
+  try {
+    localStorage.setItem(`weitblick-panel-${side}`, String(w));
+  } catch {
+    // Ohne Speicher gilt die Breite nur bis zum Schließen.
+  }
+}
+
+for (const side of ["left", "right"]) {
+  try {
+    const saved = Number(localStorage.getItem(`weitblick-panel-${side}`));
+    if (saved) setPanelWidth(side, saved);
+  } catch {
+    // Kein gespeicherter Wert: Standardbreite.
+  }
+}
+
+for (const bar of document.querySelectorAll(".splitter")) {
+  const side = bar.dataset.side;
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add("dragging");
+    document.body.classList.add("resizing");
+    hidePathPreview();
+  });
+  bar.addEventListener("pointermove", (e) => {
+    if (!bar.classList.contains("dragging")) return;
+    setPanelWidth(side, side === "left" ? e.clientX : innerWidth - e.clientX);
+  });
+  const stop = () => {
+    bar.classList.remove("dragging");
+    document.body.classList.remove("resizing");
+  };
+  bar.addEventListener("pointerup", stop);
+  bar.addEventListener("pointercancel", stop);
+  bar.addEventListener("dblclick", () => setPanelWidth(side, PANEL_LIMITS[side][2]));
+}
+
 function toggleSidebar() {
   document.body.classList.toggle("insertbar-open");
   render();
