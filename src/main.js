@@ -1,6 +1,6 @@
 import { Camera, fitRect } from "./camera.js";
 import { demo } from "./demo.js";
-import { SHAPES, shapeSvg } from "./shapes.js";
+import { SHAPES, SHAPE_GROUPS, shapeSvg } from "./shapes.js";
 import { DIAGRAMS } from "./diagrams.js";
 import { THEMES, ROLES } from "./themes.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
@@ -35,7 +35,14 @@ let savedSnapshot = null;
 
 // Stil (Farben, Schriften) gehört mit zum Stand, damit auch ein Stilwechsel rückgängig gemacht werden kann.
 function snapshot() {
-  return JSON.stringify({ objects: doc.objects, path: doc.path, theme: doc.theme, fonts: doc.fonts });
+  return JSON.stringify({
+    objects: doc.objects,
+    path: doc.path,
+    theme: doc.theme,
+    fonts: doc.fonts,
+    background: doc.background,
+    aspect: doc.aspect,
+  });
 }
 
 function checkpoint(before = snapshot()) {
@@ -51,6 +58,8 @@ function restore(snap) {
   doc.path = s.path;
   if (s.theme) doc.theme = s.theme;
   if (s.fonts) doc.fonts = s.fonts;
+  doc.background = s.background;
+  doc.aspect = s.aspect;
   registerDocFonts();
   selection = [];
   selected = null;
@@ -222,6 +231,7 @@ function buildWorld() {
   world.replaceChildren(...doc.objects.map(makeEl));
   showFileName();
   document.body.style.setProperty("--bg", doc.theme.background);
+  applyBackground();
 }
 
 function zoom() {
@@ -240,6 +250,61 @@ function render() {
   viewport.style.backgroundSize = `${size}px ${size}px`;
   viewport.style.backgroundPosition = `${tx}px ${ty}px`;
   zoomLabel.textContent = `${Math.round(z * 100)} %`;
+  updateParallax();
+}
+
+// ---------- Hintergrund ----------
+// doc.background = { src, fit: "cover" | "contain" | "tile", parallax }; das Bild liegt unter media/.
+
+const bgLayer = document.getElementById("bg-layer");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function applyBackground() {
+  const bg = doc.background ?? {};
+  const m = bg.src ? media.get(bg.src) : null;
+  bgLayer.style.backgroundImage = m ? `url("${m.url}")` : "";
+  bgLayer.className = `bg-layer fit-${bg.fit ?? "cover"}${bg.parallax ? " parallax" : ""}`;
+  viewport.classList.toggle("has-bg-image", !!m);
+  updateParallax();
+}
+
+// Parallaxe: Das Bild wandert langsamer als die Leinwand mit und zoomt nur leicht, bezogen auf den Überblick.
+function updateParallax() {
+  if (!doc.background?.parallax || !doc.background.src) {
+    bgLayer.style.transform = "";
+    return;
+  }
+  const ov = byId.get(doc.path[0]);
+  if (!ov) return;
+  const dx = clamp((camera.cx - (ov.x + ov.w / 2)) / ov.w, -0.5, 0.5) * viewport.clientWidth * 0.2;
+  const dy = clamp((camera.cy - (ov.y + ov.h / 2)) / ov.h, -0.5, 0.5) * viewport.clientHeight * 0.2;
+  const s = clamp(1 + 0.08 * Math.log2(ov.w / camera.w), 1, 1.3);
+  bgLayer.style.transform = `translate(${-dx}px, ${-dy}px) scale(${s})`;
+}
+
+async function chooseBackground() {
+  const path = await tauri.dialog.open({ multiple: false, filters: [{ name: "Bilder", extensions: Object.keys(MIME) }] });
+  if (!path) return;
+  const file = await tauri.core.invoke("import_media", { path });
+  checkpoint();
+  const src = `media/bg-${Date.now().toString(36)}.${extOf(file.name)}`;
+  addMedia(src, file.data);
+  doc.background = { fit: "cover", parallax: false, ...doc.background, src };
+  applyBackground();
+  updateStylePanel();
+}
+
+function setBackground(change) {
+  checkpoint();
+  doc.background = { fit: "cover", parallax: false, ...doc.background, ...change };
+  applyBackground();
+  updateStylePanel();
+}
+
+// Seitenverhältnis der Präsentation (für neue Rahmen), z. B. "16:9" → 16/9.
+function aspectRatio() {
+  const [w, h] = (doc.aspect ?? "16:9").split(":").map(Number);
+  return w / h || 16 / 9;
 }
 
 function screenToWorld(sx, sy) {
@@ -654,7 +719,7 @@ function addObject(kind) {
   if (kind === "text") {
     o = { ...base, id: newId("t"), type: "text", w: vw * 0.4, h: vw * 0.08, text: "Neuer Text", size: vw * 0.035 };
   } else if (kind === "frame") {
-    o = { ...base, id: newId("f"), type: "frame", w: vw * 0.6, h: vw * 0.6 * (9 / 16), title: "Neuer Rahmen" };
+    o = { ...base, id: newId("f"), type: "frame", w: vw * 0.6, h: (vw * 0.6) / aspectRatio(), title: "Neuer Rahmen" };
   } else {
     const [sw, sh] = SHAPES.find((s) => s.id === kind)?.size ?? [1, 1];
     o = { ...base, id: newId("s"), type: "shape", shape: kind, w: vw * 0.2 * sw, h: vw * 0.2 * sh, fill: doc.theme.accent };
@@ -979,6 +1044,7 @@ function showFileName() {
 // Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
 function usedMedia() {
   const names = new Set(doc.objects.filter((o) => o.type === "image").map((o) => o.src));
+  if (doc.background?.src) names.add(doc.background.src);
   for (const f of doc.fonts ?? []) for (const face of f.faces) names.add(face.src);
   return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
 }
@@ -1270,6 +1336,14 @@ const styleStatus = sidebar.querySelector(".style-status");
 
 function updateStylePanel() {
   const t = doc.theme;
+  const bg = doc.background ?? {};
+  const m = bg.src ? media.get(bg.src) : null;
+  const preview = document.getElementById("bg-preview");
+  preview.style.background = m ? `${t.background} url("${m.url}") center / cover` : t.background;
+  document.getElementById("btn-bg-remove").disabled = !m;
+  document.getElementById("sel-bg-fit").value = bg.fit ?? "cover";
+  document.getElementById("chk-parallax").checked = !!bg.parallax;
+  document.getElementById("sel-aspect").value = doc.aspect ?? "16:9";
   sidebar.querySelectorAll(".theme-card").forEach((c) => c.classList.toggle("on", c.dataset.theme === t.id));
   for (const k of THEME_COLORS) {
     const inp = sidebar.querySelector(`[data-theme-color="${k}"]`);
@@ -1305,6 +1379,17 @@ function buildStylePanel() {
   for (const inp of panel.querySelectorAll("[data-theme-color]")) {
     inp.addEventListener("change", () => setThemeValue(inp.dataset.themeColor, inp.value));
   }
+  document.getElementById("btn-bg-image").addEventListener("click", chooseBackground);
+  document.getElementById("btn-bg-remove").addEventListener("click", () => setBackground({ src: null }));
+  const fitSel = document.getElementById("sel-bg-fit");
+  fitSel.addEventListener("change", () => setBackground({ fit: fitSel.value }));
+  const parallax = document.getElementById("chk-parallax");
+  parallax.addEventListener("change", () => setBackground({ parallax: parallax.checked }));
+  const aspect = document.getElementById("sel-aspect");
+  aspect.addEventListener("change", () => {
+    checkpoint();
+    doc.aspect = aspect.value;
+  });
   for (const sel of panel.querySelectorAll("[data-theme-font]")) {
     sel.addEventListener("change", () => setThemeValue(sel.dataset.themeFont, sel.value, true));
   }
@@ -1318,14 +1403,21 @@ function showTab(tab) {
 
 function buildSidebar() {
   const shapes = sidebar.querySelector('[data-panel="shapes"]');
-  for (const s of SHAPES) {
-    const b = document.createElement("button");
-    b.className = "tile";
-    b.title = s.label;
-    const preview = shapeSvg(s.id, "currentColor") ?? `<span class="css-shape ${s.id}"></span>`;
-    b.innerHTML = `${preview}<span>${s.label}</span>`;
-    b.addEventListener("click", () => addObject(s.id));
-    shapes.append(b);
+  for (const group of SHAPE_GROUPS) {
+    const h = document.createElement("h4");
+    h.textContent = group.title;
+    const grid = document.createElement("div");
+    grid.className = "tile-grid";
+    for (const s of group.shapes) {
+      const b = document.createElement("button");
+      b.className = "tile";
+      b.title = s.label;
+      const preview = shapeSvg(s.id, "currentColor") ?? `<span class="css-shape ${s.id}"></span>`;
+      b.innerHTML = `${preview}<span>${s.label}</span>`;
+      b.addEventListener("click", () => addObject(s.id));
+      grid.append(b);
+    }
+    shapes.append(h, grid);
   }
 
   const diagrams = sidebar.querySelector('[data-panel="diagrams"]');

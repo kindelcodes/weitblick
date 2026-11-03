@@ -107,7 +107,8 @@ export class Camera {
 
 // Kamerazustand, der ein Rechteck mit etwas Rand in den Bildschirm einpasst.
 export function fitRect(rect, screenW, screenH, margin = 0.08) {
-  const aspect = screenW / screenH;
+  // Ein noch nicht sichtbares Fenster hat Größe 0; dann mit 16:9 rechnen statt mit NaN.
+  const aspect = screenW > 0 && screenH > 0 ? screenW / screenH : 16 / 9;
   const w = Math.max(rect.w, rect.h * aspect) * (1 + 2 * margin);
   return { cx: rect.x + rect.w / 2, cy: rect.y + rect.h / 2, w };
 }

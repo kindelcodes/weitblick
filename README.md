@@ -44,7 +44,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | Neue Präsentation | „Neu“ oder Strg+N |
-| Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 13 Formen (u. a. Fünf- bis Achteck, Stern, Pfeil), über 2.000 Symbole, 8 Smart-Diagramme, Google-Schriften |
+| Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 36 Formen in 5 Gruppen, über 2.000 Symbole, 8 Smart-Diagramme, Google-Schriften |
 | Schriftart | Formatleiste: Standard-, eingebettete und alle Systemschriften |
 | Speichern / Speichern unter / Öffnen | Strg+S / Strg+Umschalt+S / Strg+O |
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |

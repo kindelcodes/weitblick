@@ -53,6 +53,7 @@
     </aside>
 
     <main id="viewport" class="viewport">
+      <div id="bg-layer" class="bg-layer"></div>
       <div id="world" class="world"></div>
       <div id="formatbar" class="formatbar">
         <label class="color" title="Farbe"><input type="color" id="inp-color" data-needs="color" /></label>
@@ -91,6 +92,30 @@
       <div data-panel="style">
         <p class="note">Ein Stil setzt Hintergrund, Farben und Schriften für Titel, Untertitel und Text. Rückgängig mit Strg+Z.</p>
         <div class="theme-cards"></div>
+        <h4>Hintergrund</h4>
+        <div class="bg-controls">
+          <div class="bg-preview" id="bg-preview"></div>
+          <div class="bg-buttons">
+            <button class="row" id="btn-bg-image">Bild wählen …</button>
+            <button class="row" id="btn-bg-remove">Bild entfernen</button>
+          </div>
+        </div>
+        <label class="theme-font">Bildanpassung
+          <select id="sel-bg-fit">
+            <option value="cover">Füllen</option>
+            <option value="contain">Einpassen</option>
+            <option value="tile">Kacheln</option>
+          </select>
+        </label>
+        <label class="theme-font">Parallaxe <input type="checkbox" id="chk-parallax" /></label>
+        <label class="theme-font">Seitenverhältnis
+          <select id="sel-aspect">
+            <option value="16:9">16:9</option>
+            <option value="16:10">16:10</option>
+            <option value="4:3">4:3</option>
+            <option value="1:1">1:1</option>
+          </select>
+        </label>
         <h4>Eigene Anpassung</h4>
         <div class="theme-colors">
           <label>Hintergrund <input type="color" data-theme-color="background" /></label>
@@ -103,7 +128,7 @@
         <label class="theme-font">Text <select class="font-select" data-theme-font="body"></select></label>
         <div class="style-status note"></div>
       </div>
-      <div data-panel="shapes" class="tile-grid"></div>
+      <div data-panel="shapes"></div>
       <div data-panel="icons">
         <input id="icon-search" type="search" placeholder="Suchen (englisch, z. B. house, star)" />
         <div class="icon-count"></div>

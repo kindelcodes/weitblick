@@ -259,6 +259,41 @@ body:not(.insertbar-open) .insertbar {
   border-radius: 3px;
 }
 
+.bg-controls {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.bg-preview {
+  width: 96px;
+  height: 54px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+.bg-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.insertbar .bg-buttons .row {
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.insertbar .bg-buttons .row:disabled {
+  color: var(--disabled);
+  cursor: default;
+}
+
+.theme-font select#sel-bg-fit,
+.theme-font select#sel-aspect {
+  width: 120px;
+}
+
 .theme-colors {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -370,6 +405,10 @@ body:not(.insertbar-open) .insertbar {
 
 .css-shape.ellipse {
   border-radius: 50%;
+}
+
+.css-shape.rounded {
+  border-radius: 22%;
 }
 
 .css-shape.line {
@@ -756,6 +795,41 @@ body.presenting:not(.show-controls) .viewport {
 
 .obj.shape.ellipse {
   border-radius: 50%;
+}
+
+.obj.shape.rounded {
+  border-radius: 12%;
+}
+
+/* Hintergrundbild hinter der Leinwand; bei Parallaxe etwas größer, damit beim Verschieben kein Rand sichtbar wird. */
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+}
+
+.bg-layer.parallax {
+  inset: -15%;
+}
+
+.bg-layer.fit-cover {
+  background-size: cover;
+}
+
+.bg-layer.fit-contain {
+  background-size: contain;
+}
+
+.bg-layer.fit-tile {
+  background-repeat: repeat;
+  background-size: auto;
+}
+
+body:not(.presenting) .viewport.has-bg-image {
+  background-image: none;
 }
 
 .obj.image {
