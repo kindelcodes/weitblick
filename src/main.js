@@ -226,14 +226,18 @@ function updateEl(o, el = elOf(o)) {
   }
   if (o.type === "text") {
     if (!el.isContentEditable) {
-      // Aufzählungen („• …“) mit hängendem Einzug: Folgezeilen beginnen unter dem Text, nicht unter dem Punkt.
+      // Aufzählungen („• …“, je drei Leerzeichen davor = eine Ebene tiefer) wie in Prezi: pro Ebene 0,75 em
+      // eingerückt, Folgezeilen beginnen unter dem Text statt unter dem Punkt.
       if (/^\s*• /m.test(o.text)) {
         el.replaceChildren(
           ...o.text.split("\n").map((line) => {
             const div = document.createElement("div");
-            const lead = line.match(/^\s*• /)?.[0].length ?? 0;
-            // Leerzeichen und „•“ sind je etwa 0,3 em breit.
-            if (lead) Object.assign(div.style, { paddingLeft: `${lead * 0.31}em`, textIndent: `-${lead * 0.31}em` });
+            const m = line.match(/^( *)• /);
+            if (m) {
+              // Die Leerzeichen bleiben im Text (beim Bearbeiten bleibt die Ebene erhalten), je etwa 0,25 em breit.
+              const lead = 0.6 + m[1].length * 0.25;
+              Object.assign(div.style, { paddingLeft: `${0.75 + lead}em`, textIndent: `-${lead}em` });
+            }
             div.textContent = line || "​";
             return div;
           }),

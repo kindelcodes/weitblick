@@ -66,6 +66,51 @@ function pathPoints(d, w, h) {
   return pts.length >= 3 ? pts : null;
 }
 
+// Linie oder Pfeil als Umriss: Sehne der Länge d um den Mittelpunkt (cx, cy), um rad gedreht, zum Bogen der
+// Höhe arc gewölbt (quadratische Kurve), Strichstärke th, auf Wunsch mit Spitze am Ende.
+// Liefert ein Weitblick-Vieleck: Rahmen x/y/w/h und Eckpunkte im 100×100-Feld.
+function strokePolygon({ cx, cy, rad, d, arc, th, head }) {
+  const p0 = [-d / 2, 0];
+  const c = [0, 2 * arc]; // Kontrollpunkt: die Kurvenmitte liegt dann um arc neben der Sehne
+  const p1 = [d / 2, 0];
+  const at = (t) => [0, 1].map((i) => (1 - t) ** 2 * p0[i] + 2 * (1 - t) * t * c[i] + t * t * p1[i]);
+  const tangent = (t) => {
+    const v = [0, 1].map((i) => 2 * (1 - t) * (c[i] - p0[i]) + 2 * t * (p1[i] - c[i]));
+    const n = Math.hypot(...v) || 1;
+    return [v[0] / n, v[1] / n];
+  };
+  const len = Math.abs(d) + Math.abs(arc);
+  const headLen = head ? Math.min(th * 4, len * 0.4) : 0;
+  const tEnd = 1 - headLen / len;
+  const N = arc ? 24 : 1;
+  const left = [];
+  const right = [];
+  for (let k = 0; k <= N; k++) {
+    const t = (k / N) * tEnd;
+    const [x, y] = at(t);
+    const [tx, ty] = tangent(t);
+    left.push([x - (ty * th) / 2, y + (tx * th) / 2]);
+    right.push([x + (ty * th) / 2, y - (tx * th) / 2]);
+  }
+  let pts = [...left];
+  if (head) {
+    const [x, y] = at(tEnd);
+    const [tx, ty] = tangent(tEnd);
+    const hw = th * 1.75;
+    pts.push([x - ty * hw, y + tx * hw], at(1), [x + ty * hw, y - tx * hw]);
+  }
+  pts.push(...right.reverse());
+  // drehen und verschieben
+  pts = pts.map(([x, y]) => [cx + x * Math.cos(rad) - y * Math.sin(rad), cy + x * Math.sin(rad) + y * Math.cos(rad)]);
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs);
+  const y0 = Math.min(...ys);
+  const w = Math.max(...xs) - x0 || 1;
+  const h = Math.max(...ys) - y0 || 1;
+  return { x: x0, y: y0, w, h, points: pts.map(([x, y]) => [((x - x0) / w) * 100, ((y - y0) / h) * 100]) };
+}
+
 export async function importPrezi(entries, title, baseTheme) {
   const xmlEntry = entries.find((e) => e.name.endsWith("contents.portable/prezi.xml"));
   if (!xmlEntry?.text) throw new Error("Das ist keine Offline-Prezi: contents.portable/prezi.xml fehlt im Archiv.");
@@ -206,7 +251,10 @@ export async function importPrezi(entries, title, baseTheme) {
       const color = fillOf(st) ?? "#808080";
       const t = (Math.min(r.w, r.h) * parseFloat(st.thickness ?? "10")) / 200;
       const part = (suffix, o) => own(add({ id: `${id}-${suffix}`, type: "shape", fill: color, ...o, ...(r.rot ? { rot: r.rot } : {}) }).id, id);
-      if (kind === "zCircleFrame") part("ring", { shape: "ellipse", fillOpacity: 0, stroke: { color, width: t }, ...r });
+      // Der Ring ist so durchscheinend wie Prezis Verlauf im Mittel (z. B. 0,85 → 0,4).
+      const ringAlpha = (parseFloat(st.gradStartAlpha ?? "1") + parseFloat(st.gradEndAlpha ?? st.gradStartAlpha ?? "1")) / 2;
+      const ringColor = ringAlpha < 1 ? `color-mix(in srgb, ${color} ${Math.round(ringAlpha * 100)}%, transparent)` : color;
+      if (kind === "zCircleFrame") part("ring", { shape: "ellipse", fillOpacity: 0, stroke: { color: ringColor, width: t }, ...r });
       if (kind === "zRectangleFrame") {
         const a0 = parseFloat(st.gradStartAlpha ?? "0");
         const a1 = parseFloat(st.gradEndAlpha ?? "0");
@@ -260,10 +308,16 @@ export async function importPrezi(entries, title, baseTheme) {
       const my = cy;
       const deg = Math.round(((rad * 180) / Math.PI + (d < 0 ? 180 : 0)) * 10) / 10;
       const arrow = kind === "zArrow";
-      const h = arrow ? th / 0.24 : th; // die Pfeillinie hat ihren Schaft in der Mitte (38–62 % der Höhe)
-      // Gerade Linien mit runden Enden, die um die halbe Strichstärke überstehen: so schließen Knicke ohne Kerbe.
-      const w = arrow ? len : len + th;
-      add({ id, type: "shape", shape: arrow ? "line-arrow" : "rect", fill: fillOf(st) ?? textColor, x: mx - w / 2, y: my - h / 2, w, h, ...(arrow ? {} : { radius: 50 }), ...(deg % 360 ? { rot: deg } : {}) });
+      const arc = num(el, "arcHeight") * s;
+      const fill = fillOf(st) ?? textColor;
+      if (arrow || arc) {
+        // Pfeile und gebogene Linien als Umriss-Vieleck: Bogen mit Strichstärke, bei Pfeilen mit Spitze.
+        add({ id, type: "shape", shape: "polygon", fill, ...strokePolygon({ cx, cy, rad, d, arc, th, head: arrow }) });
+      } else {
+        // Gerade Linien mit runden Enden, die um die halbe Strichstärke überstehen: so schließen Knicke ohne Kerbe.
+        const w = len + th;
+        add({ id, type: "shape", shape: "rect", fill, x: mx - w / 2, y: my - th / 2, w, h: th, radius: 50, ...(deg % 360 ? { rot: deg } : {}) });
+      }
     } else if (kind === "zImage") {
       const file = assetFile(el);
       if (!file) {
