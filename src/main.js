@@ -1531,7 +1531,7 @@ function showFileName() {
 
 // Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
 function usedMedia() {
-  const names = new Set(doc.objects.filter((o) => o.type === "image").map((o) => o.src));
+  const names = new Set(doc.objects.filter((o) => o.type === "image").flatMap((o) => [o.src, o.source?.file]));
   if (doc.background?.src) names.add(doc.background.src);
   for (const f of doc.fonts ?? []) for (const face of f.faces) names.add(face.src);
   return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
@@ -2571,6 +2571,8 @@ function objectMenu(at) {
     frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
     selection.some((o) => o.type !== "frame" && inAnyFrame(o)) && { label: "Aus dem Rahmen lösen", run: removeFromFrame },
     one?.type === "image" && { label: "Als Hintergrund verwenden", run: imageToBackground },
+    one?.source && { label: "Original bearbeiten", run: () => editSource(one) },
+    one?.type === "image" && { label: one.source ? "Andere Originaldatei verknüpfen …" : "Originaldatei verknüpfen …", run: () => attachSource(one) },
     one?.type === "text" && { label: "Text bearbeiten", keys: "Doppelklick", run: () => startEditing(one) },
     "-",
     { label: "Als Pfadschritt anhängen", run: addSelectedToPath },
@@ -2589,6 +2591,7 @@ function canvasMenu(at) {
     { label: "Text hier", run: () => addObject("text", at) },
     { label: "Rahmen hier", run: () => addObject("frame", at) },
     { label: "Bild einfügen …", run: chooseImages },
+    { label: "Verknüpfte Grafik einfügen … (z. B. Origin)", run: () => insertLinkedGraphic(at) },
     {
       label: "Form",
       sub: ["rect", "rounded", "ellipse", "triangle", "hexagon", "star", "arrow", "bubble"].map((id) => ({
@@ -2782,6 +2785,78 @@ new ResizeObserver(() => {
   if (presenting && !offPath && !camera.anim) camera.set(stepCamera(pathIndex));
   else render();
 }).observe(viewport);
+
+// ---------- Verknüpfte Grafiken (z. B. Graphen aus Origin) ----------
+// o.link = { path, mtime }: die Grafikdatei auf der Festplatte; ändert sie sich, wird das Bild ersetzt.
+// o.source = { path, file, mtime }: die Originaldatei (z. B. .opju), als Kopie unter media/ eingebettet.
+
+const LINK_TYPES = ["svg", "png", "jpg", "jpeg", "webp", "gif"];
+
+async function insertLinkedGraphic(at = null) {
+  const path = await tauri.dialog.open({ multiple: false, filters: [{ name: "Grafik (SVG, PNG, JPG)", extensions: LINK_TYPES }] });
+  if (!path) return;
+  const file = await tauri.core.invoke("import_media", { path });
+  checkpoint();
+  const o = await placeImage(extOf(file.name), file.data, at);
+  const [mtime] = await tauri.core.invoke("file_mtimes", { paths: [path] });
+  o.link = { path, mtime };
+  const withSource = await tauri.dialog.ask(
+    "Die Grafik aktualisiert sich, sobald die Datei neu gespeichert wird.\n\nSoll auch die Originaldatei (z. B. das Origin-Projekt) verknüpft und eingebettet werden? Dann öffnet „Original bearbeiten“ sie per Rechtsklick.",
+    { title: "Verknüpfte Grafik", okLabel: "Originaldatei wählen …", cancelLabel: "Nein" },
+  );
+  if (withSource) await attachSource(o, false);
+}
+
+async function attachSource(o, undoable = true) {
+  const path = await tauri.dialog.open({ multiple: false, title: "Originaldatei wählen (z. B. Origin-Projekt)" });
+  if (!path) return;
+  const file = await tauri.core.invoke("import_media", { path });
+  if (undoable) checkpoint();
+  const name = `media/source-${o.id}-${file.name.replace(/[^\w.-]/g, "_")}`;
+  addMedia(name, file.data);
+  const [mtime] = await tauri.core.invoke("file_mtimes", { paths: [path] });
+  o.source = { path, file: name, mtime };
+  showFileName();
+}
+
+// Original öffnen: am verknüpften Ort, sonst die eingebettete Kopie (im Temp-Ordner, wird ebenfalls beobachtet).
+async function editSource(o) {
+  try {
+    const [exists] = await tauri.core.invoke("existing_files", { paths: [o.source.path] });
+    if (!exists) {
+      const m = media.get(o.source.file);
+      if (!m) throw new Error("Die Originaldatei ist weder am verknüpften Ort noch eingebettet.");
+      o.source.path = await tauri.core.invoke("write_temp", { name: o.source.file.split("/").pop().replace(/^source-[^-]+-/, ""), data: m.data });
+      [o.source.mtime] = await tauri.core.invoke("file_mtimes", { paths: [o.source.path] });
+    }
+    await tauri.core.invoke("open_file", { path: o.source.path });
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Original bearbeiten", kind: "error" });
+  }
+}
+
+// Alle zwei Sekunden prüfen, ob sich verknüpfte Dateien geändert haben (einfacher als ein Dateiwächter, reicht hier).
+async function checkLinks() {
+  const watched = doc.objects.flatMap((o) => [o.link && { o, kind: "link", ref: o.link }, o.source && { o, kind: "source", ref: o.source }].filter(Boolean));
+  if (!watched.length) return;
+  const times = await tauri.core.invoke("file_mtimes", { paths: watched.map((w) => w.ref.path) });
+  for (const [i, w] of watched.entries()) {
+    if (!times[i] || times[i] === w.ref.mtime) continue;
+    try {
+      const file = await tauri.core.invoke("import_media", { path: w.ref.path });
+      w.ref.mtime = times[i];
+      if (w.kind === "link") {
+        addMedia(w.o.src, file.data);
+        const el = elOf(w.o);
+        if (el) updateEl(w.o, el);
+      } else addMedia(w.o.source.file, file.data);
+      showFileName();
+    } catch {
+      // Datei wird vielleicht gerade noch geschrieben: beim nächsten Durchgang erneut versuchen.
+    }
+  }
+}
+if (tauri) setInterval(() => checkLinks().catch(() => {}), 2000);
 
 // ---------- Startseite: zuletzt geöffnete Präsentationen ----------
 // recent.json im App-Datenordner: [{ path, title, opened, thumb }], thumb ist ein kleines JPEG des Überblicks.

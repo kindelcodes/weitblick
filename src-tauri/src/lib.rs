@@ -296,6 +296,35 @@ fn existing_files(paths: Vec<String>) -> Vec<bool> {
     paths.iter().map(|p| std::path::Path::new(p).is_file()).collect()
 }
 
+// Änderungszeit (ms seit 1970) verknüpfter Dateien, None wenn es sie nicht (mehr) gibt.
+#[tauri::command]
+fn file_mtimes(paths: Vec<String>) -> Vec<Option<u64>> {
+    paths
+        .iter()
+        .map(|p| {
+            let t = std::fs::metadata(p).and_then(|m| m.modified()).ok()?;
+            Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64)
+        })
+        .collect()
+}
+
+// Eine Datei mit dem Programm öffnen, das das System dafür vorsieht (z. B. ein Origin-Projekt mit Origin).
+#[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("Datei kann nicht geöffnet werden: {e}"))
+}
+
+// Eingebettete Originaldatei zum Bearbeiten in den Temp-Ordner legen; liefert den Pfad.
+#[tauri::command]
+fn write_temp(name: String, data: String) -> Result<String, String> {
+    let safe: String = name.chars().map(|c| if c.is_alphanumeric() || ".-_ ".contains(c) { c } else { '_' }).collect();
+    let dir = std::env::temp_dir().join("weitblick");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(safe);
+    std::fs::write(&path, STANDARD.decode(data).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
 #[tauri::command]
 fn startup_file() -> Option<String> {
@@ -321,6 +350,9 @@ pub fn run() {
             load_recent,
             save_recent,
             existing_files,
+            file_mtimes,
+            open_file,
+            write_temp,
             write_zip,
             read_zip
         ])

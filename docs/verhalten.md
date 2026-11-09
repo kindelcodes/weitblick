@@ -86,6 +86,9 @@ Präsentieren mit Kamerafahrten und freiem Erkunden · Speichern als eine Datei 
    in PNG umwandeln (Windows mit Bordmitteln, Linux eingeschränkt) statt eines Platzhalters.
 5. Offen: Einfügen eines Origin-Graphen direkt aus der Zwischenablage (EMF) – je nach Arbeitsweise.
 
+Stand 09.11.2026: Punkte 1–3 umgesetzt (SVG/PNG/JPG; EMF zeigt die Webansicht nicht an, deshalb in Origin
+als SVG exportieren). Beobachtet wird per Abfrage alle zwei Sekunden. Offen: 4 und 5.
+
 Zurückgestellt: eigene Diagramme aus CSV-Daten (Linie, Punkte, Balken), verknüpft und live aktualisiert.
 
 **Geplant (Wunschliste):**
