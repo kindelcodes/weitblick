@@ -248,27 +248,52 @@ fn read_zip(path: String, filter: Option<String>, skip: Option<String>) -> Resul
     Ok(out)
 }
 
-// Eigene Stilkits gelten für alle Präsentationen und liegen deshalb im App-Datenordner.
-fn style_kits_file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+// Eigene Stilkits und die Liste der letzten Präsentationen gelten für alle Präsentationen
+// und liegen deshalb im App-Datenordner.
+fn app_json_file(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
     let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("style-kits.json"))
+    Ok(dir.join(name))
+}
+
+fn load_app_json(app: &tauri::AppHandle, name: &str) -> Result<String, String> {
+    Ok(std::fs::read_to_string(app_json_file(app, name)?).unwrap_or_else(|_| "[]".into()))
+}
+
+fn save_app_json(app: &tauri::AppHandle, name: &str, json: String) -> Result<(), String> {
+    // Nur gültiges JSON schreiben, damit eine kaputte Datei nie den ganzen Inhalt verliert.
+    serde_json::from_str::<serde_json::Value>(&json).map_err(|e| e.to_string())?;
+    let file = app_json_file(app, name)?;
+    let tmp = file.with_extension("json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &file).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn load_style_kits(app: tauri::AppHandle) -> Result<String, String> {
-    Ok(std::fs::read_to_string(style_kits_file(&app)?).unwrap_or_else(|_| "[]".into()))
+    load_app_json(&app, "style-kits.json")
 }
 
 #[tauri::command]
 fn save_style_kits(app: tauri::AppHandle, json: String) -> Result<(), String> {
-    // Nur gültiges JSON schreiben, damit eine kaputte Datei nie alle Kits verliert.
-    serde_json::from_str::<serde_json::Value>(&json).map_err(|e| e.to_string())?;
-    let file = style_kits_file(&app)?;
-    let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &file).map_err(|e| e.to_string())
+    save_app_json(&app, "style-kits.json", json)
+}
+
+#[tauri::command]
+fn load_recent(app: tauri::AppHandle) -> Result<String, String> {
+    load_app_json(&app, "recent.json")
+}
+
+#[tauri::command]
+fn save_recent(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    save_app_json(&app, "recent.json", json)
+}
+
+// Für den Startbildschirm: welche der zuletzt geöffneten Dateien gibt es noch?
+#[tauri::command]
+fn existing_files(paths: Vec<String>) -> Vec<bool> {
+    paths.iter().map(|p| std::path::Path::new(p).is_file()).collect()
 }
 
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
@@ -293,6 +318,9 @@ pub fn run() {
             google_font,
             load_style_kits,
             save_style_kits,
+            load_recent,
+            save_recent,
+            existing_files,
             write_zip,
             read_zip
         ])

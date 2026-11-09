@@ -27,6 +27,7 @@
       </span>
       <span class="doc-title" id="doc-title"></span>
       <div class="tools">
+        <button id="btn-start" title="Startseite mit den zuletzt geöffneten Präsentationen">Start</button>
         <button id="btn-new" title="Neue Präsentation (Strg+N)">Neu</button>
         <button id="btn-open" title="Öffnen (Strg+O)">Öffnen</button>
         <button id="btn-save" title="Speichern (Strg+S, unter neuem Namen: Strg+Umschalt+S)">Speichern</button>
@@ -190,5 +191,23 @@
       <span class="sep"></span>
       <button id="btn-grid" title="Raster: Objekte rasten beim Verschieben am Raster ein (Strg+#). Alt beim Ziehen: frei verschieben">#</button>
     </nav>
+
+    <section id="start" class="start" hidden aria-label="Startseite">
+      <div class="start-box">
+        <header class="start-head">
+          <h1>Willkommen bei <span class="weit">weit</span><span class="blick">blick</span></h1>
+          <button class="start-close" id="start-close" title="Schließen (Esc)" aria-label="Schließen">×</button>
+        </header>
+        <div class="start-actions">
+          <button data-start="new">＋ Neue Präsentation</button>
+          <button data-start="open">Öffnen …</button>
+          <button data-start="demo">Beispiel ansehen</button>
+          <span class="start-hint">Öffnen nimmt auch PowerPoint (.pptx) und Offline-Prezis (.zip).</span>
+        </div>
+        <h2>Zuletzt geöffnet</h2>
+        <div class="recent-grid" id="recent-grid"></div>
+        <p class="start-empty" id="start-empty">Noch nichts geöffnet. Gespeicherte und geöffnete Präsentationen erscheinen hier.</p>
+      </div>
+    </section>
   </body>
 </html>

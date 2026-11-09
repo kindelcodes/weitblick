@@ -1566,6 +1566,7 @@ async function save() {
       media: usedMedia(),
     });
     markSaved();
+    rememberRecent(currentPath);
   } catch (err) {
     await tauri.dialog.message(String(err), { title: "Speichern fehlgeschlagen", kind: "error" });
   }
@@ -1707,6 +1708,7 @@ async function openPath(path) {
     if (loaded.format !== "weitblick") throw new Error("Das ist keine Weitblick-Präsentation.");
     if (loaded.version > FORMAT_VERSION) throw new Error("Die Datei stammt aus einer neueren Weitblick-Version.");
     loadDocument(loaded, path, result.media);
+    rememberRecent(path);
   } catch (err) {
     await tauri.dialog.message(String(err.message ?? err), { title: "Öffnen fehlgeschlagen", kind: "error" });
   }
@@ -2781,6 +2783,165 @@ new ResizeObserver(() => {
   else render();
 }).observe(viewport);
 
+// ---------- Startseite: zuletzt geöffnete Präsentationen ----------
+// recent.json im App-Datenordner: [{ path, title, opened, thumb }], thumb ist ein kleines JPEG des Überblicks.
+
+const startEl = document.getElementById("start");
+let recent = [];
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// Vorschaubild des Überblicks auf einer Leinwand zeichnen: Hintergrund, Formen, Bilder und Texte (vereinfacht).
+async function thumbnail() {
+  const W = 320;
+  const H = 180;
+  const ov = byId.get(doc.path[0]);
+  if (!ov) return null;
+  const canvas = Object.assign(document.createElement("canvas"), { width: W, height: H });
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = doc.theme.background;
+  ctx.fillRect(0, 0, W, H);
+  const bg = doc.background?.src && media.get(doc.background.src);
+  if (bg) {
+    const img = await loadImage(bg.url).catch(() => null);
+    if (img) {
+      const k = Math.max(W / img.width, H / img.height);
+      ctx.drawImage(img, (W - img.width * k) / 2, (H - img.height * k) / 2, img.width * k, img.height * k);
+    }
+  }
+  const k = Math.min(W / ov.w, H / ov.h);
+  const ox = (W - ov.w * k) / 2 - ov.x * k;
+  const oy = (H - ov.h * k) / 2 - ov.y * k;
+  for (const o of doc.objects) {
+    if (o.hidden || o.type === "frame" || o.inside) continue;
+    const w = o.w * k;
+    const h = o.h * k;
+    if (w < 0.5 && h < 0.5) continue;
+    ctx.save();
+    ctx.translate(ox + (o.x + o.w / 2) * k, oy + (o.y + o.h / 2) * k);
+    if (o.rot) ctx.rotate((o.rot * Math.PI) / 180);
+    ctx.globalAlpha = o.opacity ?? 1;
+    if (o.type === "image" && media.get(o.src)) {
+      const img = await loadImage(media.get(o.src).url).catch(() => null);
+      const c = o.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+      if (img) ctx.drawImage(img, c.x * img.width, c.y * img.height, c.w * img.width, c.h * img.height, -w / 2, -h / 2, w, h);
+    } else if (o.type === "shape" || o.type === "icon") {
+      const svg = o.type === "icon" ? iconSvg(o.name).replace(/currentColor/g, o.color ?? doc.theme.text) : shapeSvg(o.shape, o.fill, o.points, 0);
+      if (svg) {
+        const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" '))}`;
+        const img = await loadImage(url).catch(() => null);
+        if (img) ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = o.fill;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+    } else if (o.type === "text" && o.size * k >= 1.5) {
+      ctx.fillStyle = o.color || doc.theme.text;
+      ctx.font = `${textItalic(o) ? "italic " : ""}${textWeight(o)} ${o.size * k}px ${fontStack(textFont(o))}`;
+      ctx.textAlign = o.align === "center" ? "center" : o.align === "right" ? "right" : "left";
+      ctx.textBaseline = "top";
+      const x = ctx.textAlign === "center" ? 0 : ctx.textAlign === "right" ? w / 2 : -w / 2;
+      o.text.split("\n").forEach((line, i) => ctx.fillText(line, x, -h / 2 + i * o.size * k * 1.25, w));
+    }
+    ctx.restore();
+  }
+  return canvas.toDataURL("image/jpeg", 0.75);
+}
+
+async function loadRecent() {
+  try {
+    recent = JSON.parse(await tauri.core.invoke("load_recent"));
+  } catch {
+    recent = [];
+  }
+}
+
+function storeRecent() {
+  tauri?.core.invoke("save_recent", { json: JSON.stringify(recent) }).catch(() => {});
+}
+
+// Nach dem Öffnen und Speichern: Eintrag nach vorn, mit frischem Vorschaubild.
+async function rememberRecent(path) {
+  if (!path) return;
+  await document.fonts.ready;
+  const thumb = await thumbnail().catch(() => null);
+  recent = [{ path, title: doc.title, opened: Date.now(), thumb }, ...recent.filter((r) => r.path !== path)].slice(0, 24);
+  storeRecent();
+}
+
+function relativeDate(ms) {
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days < 1) return "heute";
+  if (days < 2) return "gestern";
+  if (days < 7) return `vor ${days} Tagen`;
+  return new Date(ms).toLocaleDateString("de-DE");
+}
+
+async function showStart() {
+  if (presenting) return;
+  await loadRecent();
+  const exists = await tauri?.core.invoke("existing_files", { paths: recent.map((r) => r.path) }).catch(() => null);
+  const grid = document.getElementById("recent-grid");
+  grid.replaceChildren();
+  recent.forEach((r, i) => {
+    const missing = exists && !exists[i];
+    const card = document.createElement("div");
+    card.className = `recent-card${missing ? " missing" : ""}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.title = missing ? `Nicht gefunden: ${r.path}` : r.path;
+    const folder = r.path.split(/[\\/]/).slice(-2, -1)[0] ?? "";
+    card.innerHTML = `<img class="thumb" alt=""><div class="meta"><span class="name"></span><span class="where"></span></div><button class="remove" title="Aus der Liste entfernen" aria-label="Aus der Liste entfernen">×</button>`;
+    if (r.thumb) card.querySelector(".thumb").src = r.thumb;
+    card.querySelector(".name").textContent = r.title || r.path.split(/[\\/]/).pop();
+    card.querySelector(".where").textContent = missing ? "Datei nicht gefunden" : `${relativeDate(r.opened)} · ${folder}`;
+    const open = async () => {
+      if (missing || !(await confirmDiscard())) return;
+      hideStart();
+      await openPath(r.path);
+    };
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (e) => e.key === "Enter" && e.target === card && open());
+    card.querySelector(".remove").addEventListener("click", (e) => {
+      e.stopPropagation();
+      recent = recent.filter((x) => x !== r);
+      storeRecent();
+      showStart();
+    });
+    grid.append(card);
+  });
+  document.getElementById("start-empty").hidden = recent.length > 0;
+  startEl.hidden = false;
+}
+
+function hideStart() {
+  startEl.hidden = true;
+}
+
+document.getElementById("btn-start").addEventListener("click", showStart);
+document.getElementById("start-close").addEventListener("click", hideStart);
+startEl.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.stopPropagation();
+    hideStart();
+  }
+});
+startEl.querySelector(".start-actions").addEventListener("click", async (e) => {
+  const what = e.target.closest("button")?.dataset.start;
+  if (!what) return;
+  hideStart();
+  if (what === "new") await newDocument();
+  if (what === "open") await openFile();
+  if (what === "demo" && (await confirmDiscard())) loadDocument(structuredClone(demo), null);
+});
+
 // ---------- Start ----------
 
 doc.fonts ??= [];
@@ -2794,8 +2955,8 @@ updateToolbar();
 markSaved();
 camera.set(frameState(doc.path[0]));
 
-// Per Doppelklick auf eine .weitblick-Datei gestartet? Dann gleich diese öffnen.
+// Per Doppelklick auf eine .weitblick-Datei gestartet? Dann gleich diese öffnen, sonst die Startseite zeigen.
 tauri?.core
   .invoke("startup_file")
-  .then((path) => path && openPath(path))
+  .then((path) => (path ? openPath(path) : showStart()))
   .catch(() => {});

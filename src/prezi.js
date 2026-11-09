@@ -71,6 +71,14 @@ export async function importPrezi(entries, title, baseTheme) {
   const files = new Map(entries.map((e) => [e.name.slice(base.length), e]));
   const root = parseXml(xmlEntry.text).documentElement;
   if (root.localName !== "prezi") throw new Error("prezi.xml lässt sich nicht lesen.");
+  // Der echte Titel steht in prezi.json (der Dateiname endet meist auf „- windows“).
+  try {
+    const info = files.get("prezi.json");
+    const json = info?.text ?? new TextDecoder().decode(Uint8Array.from(atob(info.data), (c) => c.charCodeAt(0)));
+    title = JSON.parse(json).title || title;
+  } catch {
+    title = title.replace(/ - (windows|mac)$/i, "");
+  }
   if (root.getAttribute("version") !== "2") throw new Error(`Prezi-Format Version ${root.getAttribute("version")} wird noch nicht unterstützt.`);
 
   // Stile: Selektor („zRichText.title“, „*.poly2“, „zCircleFrame“, „#ID“, „background“) → Eigenschaften.

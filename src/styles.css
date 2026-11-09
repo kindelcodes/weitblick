@@ -1206,3 +1206,188 @@ body.busy * {
   margin-left: -3px;
   border-left: 1px solid rgba(255, 255, 255, 0.35);
 }
+
+/* ---------- Startseite ---------- */
+
+.start {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: start center;
+  overflow: auto;
+  padding: 48px 24px;
+  background: linear-gradient(160deg, var(--teal-dark), var(--teal) 60%, #4d8f87);
+}
+
+.start[hidden] {
+  display: none;
+}
+
+.start-box {
+  width: min(1100px, 100%);
+  background: var(--panel);
+  border-radius: 14px;
+  border-top: 4px solid var(--orange);
+  padding: 24px 28px 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.start-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.start-head h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.start-head h1 .weit,
+.start-head h1 .blick {
+  font-family: "Weitblick Brand", "Segoe UI", sans-serif;
+}
+
+.start-head h1 .weit {
+  color: var(--orange);
+}
+
+.start-head h1 .blick {
+  color: var(--teal);
+}
+
+.start-close {
+  border: 0;
+  background: none;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+
+.start-actions button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.start-actions button[data-start="new"] {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+  font-weight: 600;
+}
+
+.start-actions button:hover {
+  border-color: var(--teal);
+}
+
+.start-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.start h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 22px 0 10px;
+}
+
+.recent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.recent-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  cursor: pointer;
+}
+
+.recent-card:hover,
+.recent-card:focus-visible {
+  border-color: var(--teal);
+  box-shadow: 0 4px 14px rgba(60, 122, 115, 0.25);
+}
+
+.recent-card .thumb {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  object-fit: cover;
+  background: var(--grid);
+  display: block;
+}
+
+.recent-card .meta {
+  padding: 8px 10px 10px;
+  display: grid;
+  gap: 2px;
+}
+
+.recent-card .name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-card .where {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-card.missing {
+  opacity: 0.55;
+}
+
+.recent-card .remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 15px;
+  line-height: 24px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.recent-card:hover .remove,
+.recent-card .remove:focus-visible,
+.recent-card.missing .remove {
+  opacity: 1;
+}
+
+.start-empty {
+  color: var(--muted);
+}
