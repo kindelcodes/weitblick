@@ -860,7 +860,7 @@ body.presenting:not(.show-controls) .viewport {
 }
 
 .obj {
-  opacity: var(--alpha, 1);
+  opacity: calc(var(--alpha, 1) * var(--zoomfade, 1));
   transition: opacity 0.5s ease;
 }
 
@@ -892,6 +892,7 @@ body.presenting:not(.show-controls) .viewport {
   pointer-events: none;
 }
 
+.obj.zoom-hidden,
 .obj.anim-hidden {
   opacity: 0;
   pointer-events: none;

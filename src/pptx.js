@@ -267,7 +267,7 @@ export async function buildPptx(ctx) {
       const rot = o.rot ?? 0;
       const id = nextId++;
       if (o.type === "text") {
-        shapes += spXml(id, name, r, rot, '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>', "<a:noFill/>", txBody(o, ctx, scale), true);
+        shapes += spXml(id, name, r, rot, '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>', o.bg ? solid(o.bg) : "<a:noFill/>", txBody(o, ctx, scale), true);
       } else if (o.type === "shape" && PRESET[o.shape] && !o.points) {
         shapes += spXml(id, name, r, rot, geomFor(o, ctx), o.fade ? fadeFill(o.fill, o.fade) : solid(o.fill, o.opacity), null, false);
       } else if (o.type === "shape" || o.type === "icon") {

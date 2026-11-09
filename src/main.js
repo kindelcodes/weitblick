@@ -215,6 +215,9 @@ function updateEl(o, el = elOf(o)) {
       fontWeight: textWeight(o),
       fontStyle: textItalic(o) ? "italic" : "normal",
       fontFamily: fontStack(textFont(o)),
+      // Hinterlegter Text (aus dem Prezi-Import): Farbfläche mit Rand bgPad, ohne das Feld zu vergrößern.
+      backgroundColor: o.bg ?? "",
+      boxShadow: o.bg ? `0 0 0 ${o.bgPad ?? 0}px ${o.bg}` : "",
     });
   }
   el.style.transform = o.rot ? `rotate(${o.rot}deg)` : "";
@@ -266,6 +269,7 @@ function render() {
   viewport.style.backgroundPosition = `${tx}px ${ty}px`;
   zoomLabel.textContent = `${Math.round(z * 100)} %`;
   updateParallax();
+  updateCovers();
   positionContextBar();
 }
 
@@ -325,6 +329,27 @@ function applyBackground() {
 }
 
 // Parallaxe: Das Bild wandert langsamer als die Leinwand mit und zoomt nur leicht, bezogen auf den Überblick.
+// Kapitel wie in Prezi Next: o.cover ist nur von außen sichtbar, o.inside nur von innen. Dazwischen wird
+// überblendet, je nachdem wie weit die Kamera in den Rahmen hineingezoomt ist.
+function updateCovers() {
+  for (const o of doc.objects) {
+    if (!o.cover && !o.inside) continue;
+    const insideness = (id) => {
+      const fr = byId.get(id);
+      // zone: Bereich aller Kinder eines Prezi-Kapitels, relativ zum Rahmen
+      const f = fr?.zone ? { x: fr.x + fr.zone.x, y: fr.y + fr.zone.y, w: fr.zone.w, h: fr.zone.h } : fr;
+      if (!f || camera.cx < f.x || camera.cx > f.x + f.w || camera.cy < f.y || camera.cy > f.y + f.h) return 0;
+      // Wie stark füllt der Bereich das Bild? Maßgeblich ist die knappere Kante (Breite oder Höhe).
+      const r = Math.min(camera.w / f.w, (camera.w * viewport.clientHeight) / viewport.clientWidth / f.h);
+      return clamp((3 - r) / 1.5, 0, 1); // ganz drinnen ab 1,5-facher, draußen ab 3-facher Größe
+    };
+    const k = (o.cover ? 1 - insideness(o.cover) : 1) * (o.inside ? insideness(o.inside) : 1);
+    const el = elOf(o);
+    el?.style.setProperty("--zoomfade", k);
+    el?.classList.toggle("zoom-hidden", k === 0);
+  }
+}
+
 function updateParallax() {
   if (!doc.background?.parallax || !doc.background.src) {
     bgLayer.style.transform = "";
@@ -1611,9 +1636,9 @@ async function importPath(path) {
   const prezi = /\.zip$/i.test(path);
   try {
     document.body.classList.add("busy");
-    const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null });
+    const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null, skip: prezi ? "contents.portable/videos/" : null });
     const title = path.split(/[\\/]/).pop().replace(/\.(pptx|zip)$/i, "");
-    const result = (prezi ? importPrezi : importPptx)(entries, title, structuredClone(demo.theme));
+    const result = await (prezi ? importPrezi : importPptx)(entries, title, structuredClone(demo.theme));
     // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
     loadDocument(result.doc, null, result.media);
     await fitImportedTexts();
@@ -1634,6 +1659,18 @@ async function importPath(path) {
 async function fitImportedTexts() {
   await document.fonts.ready;
   for (const o of doc.objects) {
+    // fitH: Höhe unbekannt (Prezi ohne Autofit, Prezi Classic): nachmessen, Mittelpunkt bleibt.
+    if (o.type === "text" && o.fitH) {
+      delete o.fitH;
+      const el = elOf(o);
+      if (!el) continue;
+      const mid = o.y + o.h / 2;
+      o.h = 1;
+      updateEl(o, el);
+      o.h = el.scrollHeight;
+      o.y = mid - o.h / 2;
+      updateEl(o, el);
+    }
     if (o.type !== "text" || !o.fit) continue;
     delete o.fit;
     const el = elOf(o);
