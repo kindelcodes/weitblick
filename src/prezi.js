@@ -11,6 +11,9 @@ const kids = (el) => [...(el?.children ?? [])];
 // Prezi Classic speichert keine Schriftgröße: Text steht in einer festen Grundgröße, größer wird er nur über den
 // Maßstab.
 const CLASSIC_FONT_SIZE = 24; // abgeglichen mit einer Bildschirmansicht aus Prezi („Was ist Triathlon?“)
+// Prezi Next: Textstücke ohne eigene fontSize.
+// shortcut: Schätzwert ohne Vergleichsansicht, anpassen, falls solche Texte sichtbar zu groß/klein sind.
+const DEFAULT_FONT_SIZE = 20;
 
 // Prezi schreibt Felder auf zwei Arten: <width><double value/></width> oder
 // <xField name="width"><xDouble value/></xField>, optionale Werte zusätzlich in <xJust>.
@@ -256,7 +259,9 @@ export async function importPrezi(entries, title, baseTheme) {
       const deg = Math.round(((rad * 180) / Math.PI + (d < 0 ? 180 : 0)) * 10) / 10;
       const arrow = kind === "zArrow";
       const h = arrow ? th / 0.24 : th; // die Pfeillinie hat ihren Schaft in der Mitte (38–62 % der Höhe)
-      add({ id, type: "shape", shape: arrow ? "line-arrow" : "rect", fill: fillOf(st) ?? textColor, x: mx - len / 2, y: my - h / 2, w: len, h, ...(deg % 360 ? { rot: deg } : {}) });
+      // Gerade Linien mit runden Enden, die um die halbe Strichstärke überstehen: so schließen Knicke ohne Kerbe.
+      const w = arrow ? len : len + th;
+      add({ id, type: "shape", shape: arrow ? "line-arrow" : "rect", fill: fillOf(st) ?? textColor, x: mx - w / 2, y: my - h / 2, w, h, ...(arrow ? {} : { radius: 50 }), ...(deg % 360 ? { rot: deg } : {}) });
     } else if (kind === "zImage") {
       const file = assetFile(el);
       if (!file) {
@@ -303,9 +308,9 @@ export async function importPrezi(entries, title, baseTheme) {
       const rec = field(el, "text");
       const width = num(rec, "width", -1);
       if (width <= 0) continue; // leerer Platzhaltertext ohne Breite
-      let size = 0;
-      let bold = false;
-      let italic = false;
+      // Weitblick-Texte haben eine Größe und einen Schnitt: es gilt, was die meisten Zeichen haben
+      // (eine größere Zwischenüberschrift soll nicht den ganzen Text vergrößern).
+      const votes = { size: new Map(), bold: 0, italic: 0, chars: 0 };
       let color = null;
       let align = null;
       const lines = kids(field(rec, "paragraphs")).map((p) => {
@@ -317,21 +322,28 @@ export async function importPrezi(entries, title, baseTheme) {
           kids(field(p, "spans"))
             .map((span) => {
               const ss = field(span, "style");
-              size ||= num(ss, "fontSize");
-              bold ||= val(ss, "fontWeight") === "bold";
-              italic ||= val(ss, "fontStyle") === "italic";
+              const text = val(span, "text") ?? "";
+              const n = text.trim().length;
+              const fs = num(ss, "fontSize", DEFAULT_FONT_SIZE);
+              votes.size.set(fs, (votes.size.get(fs) ?? 0) + n);
+              votes.chars += n;
+              if (val(ss, "fontWeight") === "bold") votes.bold += n;
+              if (val(ss, "fontStyle") === "italic") votes.italic += n;
               color ??= val(ss, "color");
-              return val(span, "text") ?? "";
+              return text;
             })
             .join("")
         );
       });
+      let size = [...votes.size].sort((a, b) => b[1] - a[1])[0]?.[0] ?? DEFAULT_FONT_SIZE;
+      const bold = votes.bold > votes.chars / 2;
+      const italic = votes.italic > votes.chars / 2;
       const text = lines.join("\n");
       if (!text.trim()) continue;
       // Autofit: „wrap“ ist die natürliche Zeilenbreite bei fontSize. Ist sie breiter als das Feld („width“),
       // verkleinert Prezi die Schrift entsprechend; „height“ ist die Feldhöhe. Ohne Autofit misst Weitblick nach.
       const fit = field(rec, "autofit");
-      size = (size || 20) * Math.min(1, width / num(fit, "wrap", width));
+      size *= Math.min(1, width / num(fit, "wrap", width));
       // Die Schriftklasse kann der Objektstil (#ID) überschreiben, z. B. „Orbitron_B“.
       const cls = (classFont[st.fontClass] && st.fontClass) || classes.find((c) => classFont[c]) || "body";
       const role = ["title", "subtitle", "body"].includes(cls.replace(/_\d+$/, "")) ? cls.replace(/_\d+$/, "") : (classes.find((c) => /^(title|subtitle|body)/.test(c))?.replace(/_\d+$/, "") ?? "body");
