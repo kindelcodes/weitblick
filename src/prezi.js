@@ -498,23 +498,27 @@ export async function importPrezi(entries, title, baseTheme) {
 
   // Hintergrund: Farbe aus dem Stil, Bild aus der ersten Hintergrundebene (in Prezi mit Tiefenwirkung → Parallaxe).
   const bgStyle = styles.get("background") ?? {};
-  if (bgStyle.fillType && bgStyle.fillType !== "solid" && bgStyle.gradStartColor !== bgStyle.gradEndColor) skipped.add("Hintergrundverlauf (als Vollfarbe)");
-  let background;
+  // Farbverlauf im Hintergrund: linear von oben nach unten, radial von der Mitte nach außen.
+  const gradient =
+    ["linear", "radial"].includes(bgStyle.fillType) && bgStyle.gradStartColor && bgStyle.gradEndColor && bgStyle.gradStartColor !== bgStyle.gradEndColor
+      ? { type: bgStyle.fillType, from: bgStyle.gradStartColor, to: bgStyle.gradEndColor }
+      : null;
+  let background = gradient ? { fit: "cover", parallax: false, gradient } : undefined;
   for (const layer of kids(field(field(root, "background"), "layers"))) {
-    if (background) break;
+    if (background?.src) break;
     if (layer.localName === "backgroundSwfGraphics") {
       const file = swfFile(layer, false);
       const svg = file && (await swfToSvg(files.get(file).data).catch(() => null));
       if (!svg) continue;
       media.push({ name: "media/background.svg", data: btoa(svg) });
-      background = { src: "media/background.svg", fit: "cover", parallax: true };
+      background = { ...background, src: "media/background.svg", fit: "cover", parallax: true };
       continue;
     }
     const file = assetFile(layer);
     if (!file) continue;
     const src = `media/background.${file.split(".").pop().toLowerCase()}`;
     media.push({ name: src, data: files.get(file).data });
-    background = { src, fit: "cover", parallax: true };
+    background = { ...background, src, fit: "cover", parallax: true };
   }
 
   // Classic nennt die Klassen head/strong statt title/subtitle.

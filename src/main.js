@@ -225,7 +225,21 @@ function updateEl(o, el = elOf(o)) {
     el.classList.toggle("missing", !m);
   }
   if (o.type === "text") {
-    if (!el.isContentEditable) el.textContent = o.text;
+    if (!el.isContentEditable) {
+      // Aufzählungen („• …“) mit hängendem Einzug: Folgezeilen beginnen unter dem Text, nicht unter dem Punkt.
+      if (/^\s*• /m.test(o.text)) {
+        el.replaceChildren(
+          ...o.text.split("\n").map((line) => {
+            const div = document.createElement("div");
+            const lead = line.match(/^\s*• /)?.[0].length ?? 0;
+            // Leerzeichen und „•“ sind je etwa 0,3 em breit.
+            if (lead) Object.assign(div.style, { paddingLeft: `${lead * 0.31}em`, textIndent: `-${lead * 0.31}em` });
+            div.textContent = line || "​";
+            return div;
+          }),
+        );
+      } else el.textContent = o.text;
+    }
     Object.assign(el.style, {
       fontSize: `${o.size}px`,
       color: o.color || doc.theme.text,
@@ -349,9 +363,12 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 function applyBackground() {
   const bg = doc.background ?? {};
   const m = bg.src ? media.get(bg.src) : null;
-  bgLayer.style.backgroundImage = m ? `url("${m.url}")` : "";
+  // gradient = { type: "linear" | "radial", from, to } (aus dem Prezi-Import), liegt unter dem Bild.
+  const g = bg.gradient;
+  const grad = g ? `${g.type === "radial" ? "radial-gradient(circle" : "linear-gradient(180deg"}, ${g.from}, ${g.to})` : "";
+  bgLayer.style.backgroundImage = [m && `url("${m.url}")`, grad].filter(Boolean).join(", ");
   bgLayer.className = `bg-layer fit-${bg.fit ?? "cover"}${bg.parallax ? " parallax" : ""}`;
-  viewport.classList.toggle("has-bg-image", !!m);
+  viewport.classList.toggle("has-bg-image", !!(m || g));
   updateParallax();
 }
 
@@ -1076,9 +1093,10 @@ function finishEditing(el) {
   el.contentEditable = "false";
   const o = byId.get(el.dataset.id);
   if (!o) return;
-  if (o.text !== el.innerText) {
+  const text = el.innerText.replace(/​/g, ""); // Platzhalter leerer Aufzählungszeilen
+  if (o.text !== text) {
     checkpoint();
-    o.text = el.innerText;
+    o.text = text;
   }
   updateEl(o, el);
 }
