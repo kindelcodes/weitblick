@@ -94,6 +94,8 @@ export async function importPrezi(entries, title, baseTheme) {
       const v = p.firstElementChild?.getAttribute("value");
       if (v != null) props[p.localName] = v;
     }
+    const cr = decl.querySelector('xField[name="imageCornerRadius"] xDouble, xField[name="cornerRadius"] xDouble');
+    if (cr) props.cornerRadius = cr.getAttribute("value");
     // Farbfilter für Grafiken: „solidColorBlend“ mischt jede Farbe zu blendAlpha auf blendColor.
     const cf = decl.querySelector('xField[name="colorFilter"] xConstructor[name="solidColorBlend"]');
     if (cf) props.tint = { color: val(cf, "blendColor") ?? "#000000", alpha: num(cf, "blendAlpha", 1) };
@@ -270,15 +272,12 @@ export async function importPrezi(entries, title, baseTheme) {
       }
       const src = `media/${id}.${file.split(".").pop().toLowerCase()}`;
       media.push({ name: src, data: files.get(file).data });
-      // Zuschnitt (mask, in Bildpixeln): nur der Ausschnitt ist sichtbar, sein Mittelpunkt liegt neben der Bildmitte.
+      // Zuschnitt (mask, in Bildpixeln): nur der Ausschnitt ist sichtbar; die Position meint seine Mitte.
       const m = field(el, "mask");
       const [mx, my, mw, mh] = m ? ["x", "y", "w", "h"].map((a) => +m.getAttribute(a)) : [0, 0, W, H];
-      const dx = (mx + mw / 2 - W / 2) * s;
-      const dy = (my + mh / 2 - H / 2) * s;
-      const r = box(mw, mh);
-      r.x += dx * Math.cos(rad) - dy * Math.sin(rad);
-      r.y += dx * Math.sin(rad) + dy * Math.cos(rad);
-      add({ id, type: "image", src, ...r, ...(m ? { crop: { x: mx / W, y: my / H, w: mw / W, h: mh / H } } : {}) });
+      // Abgerundete Ecken (Objektstil, in Bildpixeln); Weitblicks radius ist Prozent der kürzeren Seite.
+      const corner = st.cornerRadius ? { radius: Math.min(50, (parseFloat(st.cornerRadius) / Math.min(mw, mh)) * 100) } : {};
+      add({ id, type: "image", src, ...box(mw, mh), ...corner, ...(m ? { crop: { x: mx / W, y: my / H, w: mw / W, h: mh / H } } : {}) });
     } else if (kind === "zPdf" || kind === "zSwfGraphics") {
       // Offline liegen PDF-Seiten und Grafiken als Flash-Vektorbild bei: als SVG übernehmen, eingefärbt wie in Prezi.
       const file = swfFile(el, kind === "zPdf");
@@ -351,6 +350,7 @@ export async function importPrezi(entries, title, baseTheme) {
       add({
         id,
         type: "text",
+        lh: 1.2, // Prezis Zeilenabstand (an einer Prezi-Ansicht gemessen)
         text,
         size: size * s,
         color: color ?? st.color ?? textColor,

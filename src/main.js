@@ -233,6 +233,7 @@ function updateEl(o, el = elOf(o)) {
       fontWeight: textWeight(o),
       fontStyle: textItalic(o) ? "italic" : "normal",
       fontFamily: fontStack(textFont(o)),
+      lineHeight: o.lh ?? "", // eigener Zeilenabstand (Prezi-Import), sonst 1,25 aus dem Stylesheet
       // Hinterlegter Text (aus dem Prezi-Import): Farbfläche mit Rand bgPad, ohne das Feld zu vergrößern.
       backgroundColor: o.bg ?? "",
       boxShadow: o.bg ? `0 0 0 ${o.bgPad ?? 0}px ${o.bg}` : "",
@@ -274,11 +275,19 @@ function zoom() {
   return viewport.clientWidth / camera.w;
 }
 
+// Bildschirmrichtung → Leinwandrichtung bei gedrehter Kamera.
+function unrotate(dx, dy) {
+  const a = (camera.rot * Math.PI) / 180;
+  return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
+}
+
 function render() {
   const z = zoom();
   const tx = viewport.clientWidth / 2 - camera.cx * z;
   const ty = viewport.clientHeight / 2 - camera.cy * z;
-  world.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+  world.style.transform = camera.rot
+    ? `translate(${viewport.clientWidth / 2}px, ${viewport.clientHeight / 2}px) rotate(${-camera.rot}deg) scale(${z}) translate(${-camera.cx}px, ${-camera.cy}px)`
+    : `translate(${tx}px, ${ty}px) scale(${z})`;
   world.style.setProperty("--inv", 1 / z); // für Auswahlrand und Anfasser in Bildschirmgröße
   // Punktraster wandert mit, damit sich Bewegung auch auf leerer Fläche zeigt.
   const grid = 40 * z;
@@ -424,10 +433,8 @@ function aspectRatio() {
 
 function screenToWorld(sx, sy) {
   const z = zoom();
-  return {
-    x: camera.cx + (sx - viewport.clientWidth / 2) / z,
-    y: camera.cy + (sy - viewport.clientHeight / 2) / z,
-  };
+  const d = unrotate((sx - viewport.clientWidth / 2) / z, (sy - viewport.clientHeight / 2) / z);
+  return { x: camera.cx + d.x, y: camera.cy + d.y };
 }
 
 function eventToWorld(e) {
@@ -616,8 +623,10 @@ function markActive() {
   [...pathList.children].forEach((li, i) => li.classList.toggle("active", i === pathIndex));
 }
 
+// Ein gedrehter Rahmen wird aufrecht angeflogen: die Kamera dreht sich mit.
 function frameState(id) {
-  return fitRect(byId.get(id), viewport.clientWidth, viewport.clientHeight);
+  const o = byId.get(id);
+  return { ...fitRect(o, viewport.clientWidth, viewport.clientHeight), rot: o.rot ?? 0 };
 }
 
 function goTo(i) {
@@ -1319,7 +1328,8 @@ viewport.addEventListener("pointermove", (e) => {
   if (!gesture) return;
   if (gesture.kind === "pan") {
     const z = zoom();
-    camera.set({ w: camera.w, cx: gesture.cx - (e.clientX - gesture.x) / z, cy: gesture.cy - (e.clientY - gesture.y) / z });
+    const d = unrotate((e.clientX - gesture.x) / z, (e.clientY - gesture.y) / z);
+    camera.set({ w: camera.w, cx: gesture.cx - d.x, cy: gesture.cy - d.y });
     return;
   }
   const p = eventToWorld(e);
@@ -1515,11 +1525,8 @@ function zoomAt(factor, sx, sy) {
   const before = screenToWorld(sx, sy);
   const w = Math.min(MAX_W, Math.max(MIN_W, camera.w / factor));
   const z = viewport.clientWidth / w;
-  camera.set({
-    w,
-    cx: before.x - (sx - viewport.clientWidth / 2) / z,
-    cy: before.y - (sy - viewport.clientHeight / 2) / z,
-  });
+  const d = unrotate((sx - viewport.clientWidth / 2) / z, (sy - viewport.clientHeight / 2) / z);
+  camera.set({ w, cx: before.x - d.x, cy: before.y - d.y });
 }
 
 // Doppelklick: Text bearbeiten, sonst zum kleinsten Rahmen unter dem Zeiger fliegen.
@@ -2387,7 +2394,7 @@ function flyToObject(o) {
   const i = o.type === "frame" ? doc.path.indexOf(o.id) : -1;
   if (i >= 0) return goTo(i);
   offPath = true;
-  camera.flyTo(fitRect(o, viewport.clientWidth, viewport.clientHeight, o.type === "frame" ? 0.08 : 0.15));
+  camera.flyTo({ ...fitRect(o, viewport.clientWidth, viewport.clientHeight, o.type === "frame" ? 0.08 : 0.15), rot: o.rot ?? 0 });
 }
 
 function updateProgress() {

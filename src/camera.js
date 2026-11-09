@@ -1,6 +1,7 @@
 // Kamera über der Leinwand.
-// Zustand: Mittelpunkt (cx, cy) in Leinwand-Koordinaten und sichtbare Breite w.
-// Der Zoom ergibt sich daraus: zoom = Bildschirmbreite / w.
+// Zustand: Mittelpunkt (cx, cy) in Leinwand-Koordinaten, sichtbare Breite w und Drehung rot (Grad).
+// Der Zoom ergibt sich daraus: zoom = Bildschirmbreite / w. Gedreht wird, damit ein gedrehter Rahmen
+// beim Anfliegen aufrecht steht (wie in Prezi Classic).
 
 const RHO = Math.SQRT2; // Wie stark weite Fahrten herauszoomen (van Wijk & Nuij 2003)
 const MIN_MS = 500;
@@ -65,18 +66,21 @@ export class Camera {
     this.cx = 0;
     this.cy = 0;
     this.w = 1000;
+    this.rot = 0;
     this.onChange = onChange;
     this.anim = null;
   }
 
   get state() {
-    return { cx: this.cx, cy: this.cy, w: this.w };
+    return { cx: this.cx, cy: this.cy, w: this.w, rot: this.rot };
   }
 
+  // Ohne rot bleibt die Drehung, wie sie ist (Verschieben und Zoomen mit der Maus).
   set(state) {
     this.cx = state.cx;
     this.cy = state.cy;
     this.w = state.w;
+    if (state.rot !== undefined) this.rot = state.rot;
     this.onChange();
   }
 
@@ -89,11 +93,15 @@ export class Camera {
   flyTo(target, done) {
     this.stop();
     const path = flightPath(this.state, target);
-    const duration = flightDuration(path.S);
+    // Drehung auf dem kürzeren Weg, mit derselben Beschleunigung wie die Fahrt.
+    const rot0 = this.rot;
+    const turn = ((((target.rot ?? rot0) - rot0) % 360) + 540) % 360 - 180;
+    const duration = flightDuration(path.S + Math.abs(turn) / 90);
     const start = performance.now();
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration);
-      this.set(t < 1 ? path.at(easeInOut(t) * path.S) : target);
+      const e = easeInOut(t);
+      this.set(t < 1 ? { ...path.at(e * path.S), rot: rot0 + turn * e } : { ...target, rot: rot0 + turn });
       if (t < 1) {
         this.anim = requestAnimationFrame(step);
       } else {
