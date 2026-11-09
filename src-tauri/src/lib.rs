@@ -220,15 +220,16 @@ fn write_zip(path: String, entries: Vec<ZipEntry>) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
 }
 
-// Liest ein ZIP-Paket (für den PowerPoint-Import): XML als Text, alles andere als Base64.
+// Liest ein ZIP-Paket (für den PowerPoint- und Prezi-Import): XML als Text, alles andere als Base64.
+// filter: nur Einträge, deren Name dies enthält (die Offline-Prezi bringt sonst ihr ganzes Programm mit).
 #[tauri::command]
-fn read_zip(path: String) -> Result<Vec<ZipEntry>, String> {
+fn read_zip(path: String, filter: Option<String>) -> Result<Vec<ZipEntry>, String> {
     let file = File::open(&path).map_err(|e| format!("Datei kann nicht geöffnet werden: {e}"))?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|_| "Das ist keine gültige PowerPoint-Datei (.pptx).".to_string())?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|_| "Das ist keine gültige ZIP-Datei (.pptx oder Offline-Prezi).".to_string())?;
     let mut out = Vec::new();
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
-        if !entry.is_file() {
+        if !entry.is_file() || filter.as_deref().is_some_and(|f| !entry.name().contains(f)) {
             continue;
         }
         let name = entry.name().to_string();

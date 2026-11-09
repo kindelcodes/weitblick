@@ -4,6 +4,7 @@ import { SHAPES, SHAPE_GROUPS, shapeSvg } from "./shapes.js";
 import { DIAGRAMS } from "./diagrams.js";
 import { THEMES, ROLES } from "./themes.js";
 import { buildPptx, importPptx } from "./pptx.js";
+import { importPrezi } from "./prezi.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
@@ -188,7 +189,9 @@ function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
   if (o.type === "shape") {
     const svg = shapeSvg(o.shape, o.fill, o.points, hasCorners(o) ? cornerRadius(o) : 0);
-    el.style.background = svg ? "" : o.fill;
+    // fade: Deckkraft oben und unten (Verlauf aus dem Prezi-Import), nur bei CSS-Formen wie dem Rechteck.
+    const mix = (a) => `color-mix(in srgb, ${o.fill} ${a * 100}%, transparent)`;
+    el.style.background = svg ? "" : o.fade ? `linear-gradient(${mix(o.fade[0])}, ${mix(o.fade[1])})` : o.fill;
     el.querySelector(".shape-svg")?.remove();
     if (svg) el.insertAdjacentHTML("afterbegin", svg);
   }
@@ -198,6 +201,10 @@ function updateEl(o, el = elOf(o)) {
     const m = media.get(o.src);
     el.style.backgroundImage = m ? `url("${m.url}")` : "";
     el.classList.toggle("missing", !m);
+    // Zuschnitt: crop = sichtbarer Ausschnitt in Anteilen des Originalbilds (aus dem Prezi-Import).
+    const c = o.crop;
+    el.style.backgroundSize = c ? `${100 / c.w}% ${100 / c.h}%` : "";
+    el.style.backgroundPosition = c ? `${c.w < 1 ? (c.x / (1 - c.w)) * 100 : 0}% ${c.h < 1 ? (c.y / (1 - c.h)) * 100 : 0}%` : "";
   }
   if (o.type === "text") {
     if (!el.isContentEditable) el.textContent = o.text;
@@ -1544,13 +1551,14 @@ async function openFile() {
   const path = await tauri.dialog.open({
     multiple: false,
     filters: [
-      { name: "Weitblick oder PowerPoint", extensions: ["weitblick", "pptx"] },
+      { name: "Weitblick, PowerPoint oder Offline-Prezi", extensions: ["weitblick", "pptx", "zip"] },
       ...FILTERS,
       { name: "PowerPoint-Präsentation", extensions: ["pptx"] },
+      { name: "Offline-Prezi (Portable Prezi)", extensions: ["zip"] },
     ],
   });
   if (!path) return;
-  if (path.toLowerCase().endsWith(".pptx")) await importPptxPath(path);
+  if (/\.(pptx|zip)$/i.test(path)) await importPath(path);
   else await openPath(path);
 }
 
@@ -1598,19 +1606,22 @@ async function exportPptx(morph) {
   }
 }
 
-async function importPptxPath(path) {
+// PowerPoint (.pptx) oder Offline-Prezi (.zip) importieren.
+async function importPath(path) {
+  const prezi = /\.zip$/i.test(path);
   try {
     document.body.classList.add("busy");
-    const entries = await tauri.core.invoke("read_zip", { path });
-    const title = path.split(/[\\/]/).pop().replace(/\.pptx$/i, "");
-    const result = importPptx(entries, title, structuredClone(demo.theme));
+    const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null });
+    const title = path.split(/[\\/]/).pop().replace(/\.(pptx|zip)$/i, "");
+    const result = (prezi ? importPrezi : importPptx)(entries, title, structuredClone(demo.theme));
     // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
     loadDocument(result.doc, null, result.media);
     await fitImportedTexts();
     savedSnapshot = null;
     showFileName();
     const notes = result.skipped.length ? `\n\nNicht oder nur vereinfacht übernommen:\n– ${result.skipped.join("\n– ")}` : "";
-    await tauri.dialog.message(`${result.slides} Folien als Rahmen auf die Leinwand gelegt.${notes}`, { title: "PowerPoint-Import", kind: "info" });
+    const summary = prezi ? `${result.count} Objekte und ${result.steps} Pfadschritte aus Prezi übernommen.` : `${result.slides} Folien als Rahmen auf die Leinwand gelegt.`;
+    await tauri.dialog.message(`${summary}${notes}`, { title: prezi ? "Prezi-Import" : "PowerPoint-Import", kind: "info" });
   } catch (err) {
     await tauri.dialog.message(String(err?.message ?? err), { title: "Import fehlgeschlagen", kind: "error" });
   } finally {
@@ -1643,7 +1654,7 @@ function showExportMenu() {
       { label: "PowerPoint mit Morph-Übergängen …", run: () => exportPptx(true) },
       { label: "PowerPoint klassisch …", run: () => exportPptx(false) },
       "-",
-      { label: "PowerPoint importieren …", run: openFile },
+      { label: "PowerPoint oder Offline-Prezi importieren …", run: openFile },
     ],
     ctxMenu,
   );

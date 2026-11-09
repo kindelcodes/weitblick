@@ -166,6 +166,12 @@ function solid(color, opacity) {
   return `<a:solidFill><a:srgbClr val="${hex6(color)}">${alpha}</a:srgbClr></a:solidFill>`;
 }
 
+// Verlauf von oben nach unten in einer Farbe, mit Deckkraft fade[0] → fade[1].
+function fadeFill(color, fade) {
+  const stop = (pos, a) => `<a:gs pos="${pos}"><a:srgbClr val="${hex6(color)}"><a:alpha val="${Math.round(a * 100000)}"/></a:srgbClr></a:gs>`;
+  return `<a:gradFill rotWithShape="1"><a:gsLst>${stop(0, fade[0])}${stop(100000, fade[1])}</a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`;
+}
+
 function spXml(id, name, r, rot, geom, fill, body, isText) {
   return (
     `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${esc(name)}"/><p:cNvSpPr${isText ? ' txBox="1"' : ""}/><p:nvPr/></p:nvSpPr>` +
@@ -173,12 +179,14 @@ function spXml(id, name, r, rot, geom, fill, body, isText) {
   );
 }
 
-function picXml(id, name, rId, r, rot, opacity, rounded) {
+function picXml(id, name, rId, r, rot, opacity, rounded, crop) {
   const alpha = opacity != null && opacity < 1 ? `<a:alphaModFix amt="${Math.round(opacity * 100000)}"/>` : "";
   const geom = rounded ? `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val ${rounded}"/></a:avLst></a:prstGeom>` : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+  const pct = (v) => Math.round(v * 100000);
+  const src = crop ? `<a:srcRect l="${pct(crop.x)}" t="${pct(crop.y)}" r="${pct(1 - crop.x - crop.w)}" b="${pct(1 - crop.y - crop.h)}"/>` : "";
   return (
     `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${esc(name)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
-    `<p:blipFill><a:blip r:embed="${rId}">${alpha}</a:blip><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+    `<p:blipFill><a:blip r:embed="${rId}">${alpha}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
     `<p:spPr>${xfrm(r, rot)}${geom}</p:spPr></p:pic>`
   );
 }
@@ -261,7 +269,7 @@ export async function buildPptx(ctx) {
       if (o.type === "text") {
         shapes += spXml(id, name, r, rot, '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>', "<a:noFill/>", txBody(o, ctx, scale), true);
       } else if (o.type === "shape" && PRESET[o.shape] && !o.points) {
-        shapes += spXml(id, name, r, rot, geomFor(o, ctx), solid(o.fill, o.opacity), null, false);
+        shapes += spXml(id, name, r, rot, geomFor(o, ctx), o.fade ? fadeFill(o.fill, o.fade) : solid(o.fill, o.opacity), null, false);
       } else if (o.type === "shape" || o.type === "icon") {
         const svg = o.type === "icon" ? ctx.iconSvg(o.name).replace(/currentColor/g, `#${hex6(o.color ?? doc.theme.text)}`) : ctx.shapeSvg(o.shape, o.fill, o.points, ctx.hasCorners(o) ? ctx.cornerRadius(o) : 0);
         if (!svg) continue;
@@ -270,7 +278,7 @@ export async function buildPptx(ctx) {
       } else if (o.type === "image" && media.get(o.src)) {
         const file = await imageMedia(o.src);
         const rr = ctx.hasCorners(o) ? Math.round(ctx.cornerRadius(o) * 1000) : 0;
-        shapes += picXml(id, name, rid(file), r, rot, o.opacity, rr);
+        shapes += picXml(id, name, rid(file), r, rot, o.opacity, rr, o.crop);
       } else if (o.type === "frame" && o.fill) {
         shapes += spXml(id, name, r, rot, geomFor({ ...o, shape: "rect" }, ctx), solid(o.fill), null, false);
       }

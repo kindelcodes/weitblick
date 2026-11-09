@@ -54,6 +54,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | PowerPoint exportieren | „Export ▾“ → mit Morph-Übergängen (jeder Pfadschritt eine Folie, die Kamerafahrt wird zu PowerPoints Morph; ab PowerPoint 2019/365) oder klassisch |
 | PowerPoint importieren | „Öffnen“ und eine .pptx wählen (oder „Export ▾“ → importieren): jede Folie wird ein Rahmen samt Pfadschritt |
+| Prezi importieren | In Prezi „Offline-Präsentation herunterladen“ (Portable Prezi, .zip), dann in Weitblick „Öffnen“ und die .zip wählen: Leinwand, Rahmen, Texte, Bilder (mit Zuschnitt), Formen, Schriften, Pfad und Einblendungen kommen an derselben Stelle an. Das Prezi-Programm im Archiv wird nicht gestartet |
 | Neue Präsentation | „Neu“ oder Strg+N |
 | Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile und eigene Stilkits, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 38 Formen in 6 Gruppen (inkl. Weltkarte), über 2.000 Symbole, 15 Inhaltsblöcke, Google-Schriften |
 | Eigenes Stilkit | Stil-Reiter: Farben, Schriften und fett/kursiv je Rolle einstellen, Namen eingeben, „Speichern“; steht danach in jeder Präsentation bereit |
@@ -99,6 +100,7 @@ Ohne Node.js: Die Oberfläche ist reines HTML/CSS/JavaScript in `src/`, die Date
 - `src/camera.js`: Kamera und Kamerafahrten („smooth zoom and pan“ nach van Wijk & Nuij, 2003)
 - `src/main.js`: Darstellung, Bearbeiten, Pfad, Speichern und Öffnen
 - `src/demo.js`: Beispielpräsentation
+- `src/pptx.js`, `src/prezi.js`: PowerPoint-Export/-Import und Import von Offline-Prezis
 - `docs/verhalten.md`: beobachtetes Verhalten zoombarer Präsentationen, aus dem die Funktionsliste abgeleitet ist
 
 ## Lizenz
