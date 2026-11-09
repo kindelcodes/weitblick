@@ -104,7 +104,12 @@ const MIME = {
   webp: "image/webp",
   svg: "image/svg+xml",
   bmp: "image/bmp",
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
 };
+const isVideo = (name) => MIME[extOf(name)]?.startsWith("video/");
 
 function extOf(name) {
   return name.split(".").pop().toLowerCase();
@@ -143,17 +148,18 @@ async function insertImages(paths, at) {
   setSelection(placed);
 }
 
-// Ein Bild (Base64) auf die Leinwand legen. Der Aufrufer legt vorher den Rückgängig-Punkt an.
+// Ein Bild oder Video (Base64) auf die Leinwand legen. Der Aufrufer legt vorher den Rückgängig-Punkt an.
 async function placeImage(ext, data, at = null, index = 0) {
   const id = newId("i");
   const src = `media/${id}.${ext}`;
   addMedia(src, data);
-  const size = await imageSize(media.get(src).url);
+  const video = isVideo(src);
+  const size = video ? { w: 16, h: 9 } : await imageSize(media.get(src).url);
   const w = camera.w * 0.35;
   const h = (w * size.h) / size.w;
   const c = at ?? { x: camera.cx, y: camera.cy };
   const offset = camera.w * 0.03 * index;
-  const o = { id, type: "image", src, x: c.x - w / 2 + offset, y: c.y - h / 2 + offset, w, h };
+  const o = { id, type: video ? "video" : "image", src, x: c.x - w / 2 + offset, y: c.y - h / 2 + offset, w, h };
   doc.objects.push(o);
   byId.set(id, o);
   world.append(makeEl(o));
@@ -164,7 +170,7 @@ async function placeImage(ext, data, at = null, index = 0) {
 async function chooseImages() {
   const paths = await tauri.dialog.open({
     multiple: true,
-    filters: [{ name: "Bilder", extensions: Object.keys(MIME) }],
+    filters: [{ name: "Bilder und Videos", extensions: Object.keys(MIME) }],
   });
   if (paths) await insertImages([].concat(paths));
 }
@@ -180,6 +186,7 @@ function makeEl(o) {
   if (o.type === "frame" && o.hidden) el.classList.add("hidden-frame");
   if (o.type === "shape") el.classList.add(o.shape);
   if (o.type === "icon") el.innerHTML = iconSvg(o.name);
+  if (o.type === "video") el.innerHTML = '<video preload="metadata" playsinline controls></video>';
   if (o.type === "text") el.addEventListener("blur", () => finishEditing(el));
   updateEl(o, el);
   return el;
@@ -188,10 +195,15 @@ function makeEl(o) {
 function updateEl(o, el = elOf(o)) {
   Object.assign(el.style, { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px` });
   if (o.type === "shape") {
-    const svg = shapeSvg(o.shape, o.fill, o.points, hasCorners(o) ? cornerRadius(o) : 0);
+    // stroke = { color, width } (Umrandung aus dem Prezi-Import): Rechteck und Ellipse zeichnet dann CSS.
+    const outlined = o.stroke && ["rect", "ellipse"].includes(o.shape);
+    const svg = outlined ? null : shapeSvg(o.shape, o.fill, o.points, hasCorners(o) ? cornerRadius(o) : 0);
     // fade: Deckkraft oben und unten (Verlauf aus dem Prezi-Import), nur bei CSS-Formen wie dem Rechteck.
+    // fillOpacity: nur die Füllung durchscheinend (die Umrandung bleibt deckend).
     const mix = (a) => `color-mix(in srgb, ${o.fill} ${a * 100}%, transparent)`;
-    el.style.background = svg ? "" : o.fade ? `linear-gradient(${mix(o.fade[0])}, ${mix(o.fade[1])})` : o.fill;
+    el.style.background = svg ? "" : o.fade ? `linear-gradient(${mix(o.fade[0])}, ${mix(o.fade[1])})` : o.fillOpacity != null ? mix(o.fillOpacity) : o.fill;
+    el.style.border = outlined ? `${o.stroke.width}px solid ${o.stroke.color}` : "";
+    el.style.borderRadius = outlined && o.shape === "ellipse" ? "50%" : "";
     el.querySelector(".shape-svg")?.remove();
     if (svg) el.insertAdjacentHTML("afterbegin", svg);
   }
@@ -205,6 +217,12 @@ function updateEl(o, el = elOf(o)) {
     const c = o.crop;
     el.style.backgroundSize = c ? `${100 / c.w}% ${100 / c.h}%` : "";
     el.style.backgroundPosition = c ? `${c.w < 1 ? (c.x / (1 - c.w)) * 100 : 0}% ${c.h < 1 ? (c.y / (1 - c.h)) * 100 : 0}%` : "";
+  }
+  if (o.type === "video") {
+    const m = media.get(o.src);
+    const v = el.querySelector("video");
+    if (m && v.src !== m.url) v.src = m.url;
+    el.classList.toggle("missing", !m);
   }
   if (o.type === "text") {
     if (!el.isContentEditable) el.textContent = o.text;
@@ -458,7 +476,7 @@ function stepLabel(o) {
   if (!o) return null;
   if (o.title) return o.title;
   if (o.type === "text") return o.text.split("\n")[0].slice(0, 40) || "Text";
-  return { image: "Bild", shape: "Form" }[o.type];
+  return { image: "Bild", shape: "Form", video: "Video" }[o.type];
 }
 
 // ---------- Pfad umsortieren per Ziehen ----------
@@ -609,6 +627,13 @@ function goTo(i) {
   updateProgress();
   if (presenting) applyVisibility(pathIndex);
   camera.flyTo(stepCamera(pathIndex));
+  // Ein Video, auf das der Pfad zoomt, startet; alle anderen halten an.
+  for (const o of doc.objects) {
+    if (o.type !== "video") continue;
+    const v = elOf(o)?.querySelector("video");
+    if (presenting && doc.path[pathIndex] === o.id) v?.play().catch(() => {});
+    else v?.pause();
+  }
 }
 
 // ---------- Animationsschritte ----------
@@ -1531,7 +1556,7 @@ function showFileName() {
 
 // Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
 function usedMedia() {
-  const names = new Set(doc.objects.filter((o) => o.type === "image").flatMap((o) => [o.src, o.source?.file]));
+  const names = new Set(doc.objects.filter((o) => o.type === "image" || o.type === "video").flatMap((o) => [o.src, o.source?.file]));
   if (doc.background?.src) names.add(doc.background.src);
   for (const f of doc.fonts ?? []) for (const face of f.faces) names.add(face.src);
   return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
@@ -1637,7 +1662,7 @@ async function importPath(path) {
   const prezi = /\.zip$/i.test(path);
   try {
     document.body.classList.add("busy");
-    const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null, skip: prezi ? "contents.portable/videos/" : null });
+    const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null, skip: prezi ? "contents.portable/videos/thumb_" : null });
     const title = path.split(/[\\/]/).pop().replace(/\.(pptx|zip)$/i, "");
     const result = await (prezi ? importPrezi : importPptx)(entries, title, structuredClone(demo.theme));
     // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
@@ -1645,6 +1670,7 @@ async function importPath(path) {
     await fitImportedTexts();
     savedSnapshot = null;
     showFileName();
+    rememberRecent(path);
     const notes = result.skipped.length ? `\n\nNicht oder nur vereinfacht übernommen:\n– ${result.skipped.join("\n– ")}` : "";
     const summary = prezi ? `${result.count} Objekte und ${result.steps} Pfadschritte aus Prezi übernommen.` : `${result.slides} Folien als Rahmen auf die Leinwand gelegt.`;
     await tauri.dialog.message(`${summary}${notes}`, { title: prezi ? "Prezi-Import" : "PowerPoint-Import", kind: "info" });
@@ -2490,6 +2516,7 @@ async function stopPresentation() {
   presenting = false;
   document.body.classList.remove("presenting", "show-controls");
   applyVisibility(pathIndex); // im Editor ist alles sichtbar
+  for (const v of world.querySelectorAll(".obj.video video")) v.pause();
   await setFullscreen(false);
   await restoreWindow();
 }
@@ -2980,7 +3007,8 @@ async function showStart() {
     const open = async () => {
       if (missing || !(await confirmDiscard())) return;
       hideStart();
-      await openPath(r.path);
+      // PowerPoint und Offline-Prezis stehen ebenfalls in der Liste und werden erneut importiert.
+      await (/\.(pptx|zip)$/i.test(r.path) ? importPath(r.path) : openPath(r.path));
     };
     card.addEventListener("click", open);
     card.addEventListener("keydown", (e) => e.key === "Enter" && e.target === card && open());

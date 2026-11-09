@@ -1391,3 +1391,20 @@ body.busy * {
 .start-empty {
   color: var(--muted);
 }
+
+/* Videos: im Editor nur auswählbar (Klicks gehen an das Objekt), beim Präsentieren mit Wiedergabeleiste. */
+.obj.video {
+  background: #000;
+}
+
+.obj.video video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+body.presenting .obj.video video {
+  pointer-events: auto;
+}

@@ -9,9 +9,8 @@ const parseXml = (t) => new DOMParser().parseFromString(t, "application/xml");
 const kids = (el) => [...(el?.children ?? [])];
 
 // Prezi Classic speichert keine Schriftgröße: Text steht in einer festen Grundgröße, größer wird er nur über den
-// Maßstab. Geschätzt aus Textfeldbreiten (Vorlagen-Platzhalter passen in eine Zeile).
-// shortcut: Schätzwert, mit einer Bildschirmansicht aus Prezi abgleichen, sobald es eine gibt.
-const CLASSIC_FONT_SIZE = 22;
+// Maßstab.
+const CLASSIC_FONT_SIZE = 24; // abgeglichen mit einer Bildschirmansicht aus Prezi („Was ist Triathlon?“)
 
 // Prezi schreibt Felder auf zwei Arten: <width><double value/></width> oder
 // <xField name="width"><xDouble value/></xField>, optionale Werte zusätzlich in <xJust>.
@@ -196,16 +195,29 @@ export async function importPrezi(entries, title, baseTheme) {
     } else if (kind === "zZoomArea") {
       add({ id, type: "frame", title: "", hidden: true, ...box(W, H) });
     } else if (["zInvisibleFrame", "zCircleFrame", "zRectangleFrame", "zBracketFrame"].includes(kind)) {
-      // Classic-Rahmen: Kreis und Rechteck sind sichtbar gefüllt, Weitblick-Rahmen nicht; die Füllung wird eine Form.
+      // Classic-Rahmen sind sichtbar (Ring, Klammern, Kasten), Weitblick-Rahmen nicht: das Aussehen wird zu Formen.
+      // Strichstärke: thickness in halben Prozent der kürzeren Seite (Kreis 800 breit, thickness 10 → 40).
       const r = box(W, H);
-      if (kind !== "zInvisibleFrame" && kind !== "zBracketFrame") {
-        const a0 = parseFloat(st.gradStartAlpha ?? st.alpha ?? "1");
-        const a1 = parseFloat(st.gradEndAlpha ?? st.alpha ?? "1");
-        const fill = fillOf(st) ?? "#808080";
-        const shape = kind === "zCircleFrame" ? { shape: "ellipse", ...((a0 + a1) / 2 < 1 ? { opacity: (a0 + a1) / 2 } : {}) } : { shape: "rect", ...(a0 !== a1 ? { fade: [a0, a1] } : a0 < 1 ? { opacity: a0 } : {}) };
-        if (a0 + a1 > 0) own(add({ id: `${id}-fill`, type: "shape", fill, ...shape, ...r }).id, id);
+      const color = fillOf(st) ?? "#808080";
+      const t = (Math.min(r.w, r.h) * parseFloat(st.thickness ?? "10")) / 200;
+      const part = (suffix, o) => own(add({ id: `${id}-${suffix}`, type: "shape", fill: color, ...o, ...(r.rot ? { rot: r.rot } : {}) }).id, id);
+      if (kind === "zCircleFrame") part("ring", { shape: "ellipse", fillOpacity: 0, stroke: { color, width: t }, ...r });
+      if (kind === "zRectangleFrame") {
+        const a0 = parseFloat(st.gradStartAlpha ?? "0");
+        const a1 = parseFloat(st.gradEndAlpha ?? "0");
+        part("box", { shape: "rect", fade: [a0, a1], stroke: { color: st.borderColor ?? color, width: parseFloat(st.borderAlpha ?? "1") > 0 ? t : 0 }, ...r });
       }
-      if (kind === "zBracketFrame") skipped.add("Klammer-Rahmen (ohne Klammern)");
+      if (kind === "zBracketFrame") {
+        // [ ] aus je einem senkrechten Balken und zwei kurzen Armen; die Arme reichen 14 % der Breite hinein.
+        // shortcut: bei gedrehten Klammer-Rahmen drehen sich die Teile einzeln um ihre Mitte, nicht um den Rahmen.
+        const arm = r.w * 0.14;
+        part("l", { shape: "rect", x: r.x, y: r.y, w: t, h: r.h });
+        part("lt", { shape: "rect", x: r.x, y: r.y, w: arm, h: t });
+        part("lb", { shape: "rect", x: r.x, y: r.y + r.h - t, w: arm, h: t });
+        part("r", { shape: "rect", x: r.x + r.w - t, y: r.y, w: t, h: r.h });
+        part("rt", { shape: "rect", x: r.x + r.w - arm, y: r.y, w: arm, h: t });
+        part("rb", { shape: "rect", x: r.x + r.w - arm, y: r.y + r.h - t, w: arm, h: t });
+      }
       add({ id, type: "frame", title: "", ...r });
     } else if (kind === "zShape") {
       const type = val(el, "shapeType");
@@ -217,23 +229,30 @@ export async function importPrezi(entries, title, baseTheme) {
       const linear = st.fillType === "linear" && st.gradStartAlpha !== st.gradEndAlpha;
       if (st.fillType && !["solid", "linear"].includes(st.fillType)) skipped.add("Farbverläufe in Formen (als Vollfarbe)");
       const alpha = parseFloat(st.alpha ?? "1");
+      const fill = (st.fillType === "linear" ? st.gradStartColor : st.color) ?? fillOf(st) ?? "#808080";
+      const r = box(W, H);
+      // thickness < 100: Prezi zeichnet einen kräftigen Ring dieser Stärke (Prozent der Größe) und füllt
+      // das Innere nur mit der Deckkraft alpha.
+      const thick = parseFloat(st.thickness ?? "100");
+      const ring = thick < 100 && ["rect", "ellipse"].includes(shape);
       add({
         id,
         type: "shape",
         shape: points ? "polygon" : (shape ?? "rect"),
         ...(points ? { points } : {}),
-        fill: (st.fillType === "linear" ? st.gradStartColor : st.color) ?? fillOf(st) ?? "#808080",
-        ...box(W, H),
+        fill,
+        ...r,
         ...(linear && (shape ?? "rect") === "rect" && !points ? { fade: [parseFloat(st.gradStartAlpha ?? "1"), parseFloat(st.gradEndAlpha ?? "0")] } : {}),
-        ...(alpha < 1 ? { opacity: alpha } : {}),
+        ...(ring ? { stroke: { color: fill, width: (Math.min(r.w, r.h) * thick) / 100 }, ...(alpha < 1 ? { fillOpacity: alpha } : {}) } : alpha < 1 ? { opacity: alpha } : {}),
       });
     } else if (kind === "zLine" || kind === "zArrow") {
-      // Linie von ihrem Anfang (Ursprung) um startEndDistance entlang der gedrehten x-Achse.
+      // Linie der Länge startEndDistance entlang der gedrehten x-Achse, mit dem Mittelpunkt im Ursprung
+      // (geprüft: so schließen die Teilstücke einer gezeichneten Kurve nahtlos aneinander).
       const d = num(el, "startEndDistance") * s;
       const th = Math.max(parseFloat(st.thickness ?? "4") * s, 1);
       const len = Math.abs(d);
-      const mx = cx + (Math.cos(rad) * d) / 2;
-      const my = cy + (Math.sin(rad) * d) / 2;
+      const mx = cx;
+      const my = cy;
       const deg = Math.round(((rad * 180) / Math.PI + (d < 0 ? 180 : 0)) * 10) / 10;
       const arrow = kind === "zArrow";
       const h = arrow ? th / 0.24 : th; // die Pfeillinie hat ihren Schaft in der Mitte (38–62 % der Höhe)
@@ -269,8 +288,17 @@ export async function importPrezi(entries, title, baseTheme) {
         add({ id, type: "icon", name: "shapes", color: textColor, ...box(W || 200, H || 200) });
       }
     } else if (kind === "zVideo") {
-      skipped.add("Videos (als Platzhalter-Symbol)");
-      add({ id, type: "icon", name: "video", color: textColor, ...box(640, 360) });
+      // Die Videodatei heißt wie das Ende ihrer Online-Adresse. Größe steht nicht im XML: 16:9 angenommen.
+      const name = (val(el, "onlineAssetUrl") ?? "").split("/").pop();
+      const file = name && files.get(`videos/${name}`);
+      if (file?.data) {
+        const src = `media/${id.replace(/\W/g, "_")}.${name.split(".").pop().toLowerCase()}`;
+        media.push({ name: src, data: file.data });
+        add({ id, type: "video", src, ...box(W || 640, H || 360) });
+      } else {
+        skipped.add("Videos, die nicht im Archiv liegen (als Platzhalter-Symbol)");
+        add({ id, type: "icon", name: "video", color: textColor, ...box(640, 360) });
+      }
     } else if (kind === "zRichText") {
       const rec = field(el, "text");
       const width = num(rec, "width", -1);
@@ -304,8 +332,9 @@ export async function importPrezi(entries, title, baseTheme) {
       // verkleinert Prezi die Schrift entsprechend; „height“ ist die Feldhöhe. Ohne Autofit misst Weitblick nach.
       const fit = field(rec, "autofit");
       size = (size || 20) * Math.min(1, width / num(fit, "wrap", width));
-      const cls = classes.find((c) => classFont[c]) ?? "body";
-      const role = cls.replace(/_\d+$/, "");
+      // Die Schriftklasse kann der Objektstil (#ID) überschreiben, z. B. „Orbitron_B“.
+      const cls = (classFont[st.fontClass] && st.fontClass) || classes.find((c) => classFont[c]) || "body";
+      const role = ["title", "subtitle", "body"].includes(cls.replace(/_\d+$/, "")) ? cls.replace(/_\d+$/, "") : (classes.find((c) => /^(title|subtitle|body)/.test(c))?.replace(/_\d+$/, "") ?? "body");
       const bg = st.displayBackground === "true" ? { bg: st.backgroundColor ?? "#666666", bgPad: parseFloat(st.backgroundPadding ?? "0") * s } : {};
       add({
         id,
@@ -314,9 +343,9 @@ export async function importPrezi(entries, title, baseTheme) {
         size: size * s,
         color: color ?? st.color ?? textColor,
         align: align ?? "left",
-        role: ["title", "subtitle", "body"].includes(role) ? role : "body",
-        ...(cls !== role ? { font: classFont[cls].family } : {}),
-        ...(bold || (cls !== role && classFont[cls].bold) ? { weight: 700 } : {}),
+        role,
+        ...(cls !== role && classFont[cls] ? { font: classFont[cls].family } : {}),
+        ...(bold || (cls !== role && classFont[cls]?.bold) ? { weight: 700 } : {}),
         ...(italic ? { italic: true } : {}),
         ...(fit ? {} : { fitH: true }),
         ...bg,
@@ -420,6 +449,9 @@ export async function importPrezi(entries, title, baseTheme) {
   let y0 = Math.min(...vis.map((o) => o.y));
   let x1 = Math.max(...vis.map((o) => o.x + o.w));
   let y1 = Math.max(...vis.map((o) => o.y + o.h));
+  // Prezi Next kann den Überblick fest vorgeben (overviewBounds); dann diesen Ausschnitt nehmen.
+  const fixed = root.querySelector('xField[name="boundsInWorld"] > xRectangle');
+  if (fixed) [x0, y0, x1, y1] = ["x", "y", "w", "h"].map((a) => +fixed.getAttribute(a)).map((v, i, [x, y, w, h]) => [x, y, x + w, y + h][i]);
   const grow = (x1 - x0) / (y1 - y0) > aw / ah ? [0, ((x1 - x0) * ah) / aw - (y1 - y0)] : [((y1 - y0) * aw) / ah - (x1 - x0), 0];
   x0 -= grow[0] / 2;
   x1 += grow[0] / 2;

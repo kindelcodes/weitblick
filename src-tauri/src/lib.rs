@@ -222,7 +222,7 @@ fn write_zip(path: String, entries: Vec<ZipEntry>) -> Result<(), String> {
 
 // Liest ein ZIP-Paket (für den PowerPoint- und Prezi-Import): XML als Text, alles andere als Base64.
 // filter: nur Einträge, deren Name dies enthält (die Offline-Prezi bringt sonst ihr ganzes Programm mit);
-// skip: Einträge, deren Name dies enthält, auslassen (z. B. Videos, die Weitblick noch nicht abspielt).
+// skip: Einträge, deren Name dies enthält, auslassen (z. B. Vorschaubilder, die Weitblick nicht braucht).
 #[tauri::command]
 fn read_zip(path: String, filter: Option<String>, skip: Option<String>) -> Result<Vec<ZipEntry>, String> {
     let file = File::open(&path).map_err(|e| format!("Datei kann nicht geöffnet werden: {e}"))?;
