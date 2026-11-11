@@ -1408,3 +1408,123 @@ body.busy * {
 body.presenting .obj.video video {
   pointer-events: auto;
 }
+
+/* PDF über den Druckdialog: nur die Seiten des Druckstapels, eine pro Pfadschritt. */
+#print-deck {
+  display: none;
+}
+
+@media print {
+  body.printing {
+    display: block;
+    height: auto;
+    overflow: visible;
+    background: none;
+  }
+
+  body.printing > :not(#print-deck) {
+    display: none !important;
+  }
+
+  body.printing #print-deck {
+    display: block;
+  }
+
+  #print-deck .print-page {
+    position: relative;
+    overflow: hidden;
+    break-after: page;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  #print-deck .print-page .bg-layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  #print-deck .obj.frame {
+    border-color: transparent;
+    background: none;
+  }
+}
+
+/* Bild zuschneiden */
+.crop-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 22, 26, 0.6);
+}
+
+.crop-box {
+  background: var(--panel);
+  border-radius: 12px;
+  border-top: 4px solid var(--orange);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.crop-stage {
+  position: relative;
+  line-height: 0;
+  user-select: none;
+}
+
+.crop-stage img {
+  max-width: 70vw;
+  max-height: 65vh;
+  display: block;
+}
+
+.crop-rect {
+  position: absolute;
+  outline: 2px solid var(--orange);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  cursor: move;
+}
+
+.crop-stage {
+  overflow: hidden;
+}
+
+.crop-h {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 2px solid var(--orange);
+  border-radius: 3px;
+}
+
+.crop-h[data-k="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.crop-h[data-k="ne"] { right: 0; top: 0; cursor: nesw-resize; }
+.crop-h[data-k="sw"] { left: 0; bottom: 0; cursor: nesw-resize; }
+.crop-h[data-k="se"] { right: 0; bottom: 0; cursor: nwse-resize; }
+
+.crop-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.crop-buttons span {
+  flex: 1;
+}
+
+.crop-buttons button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.crop-buttons button.primary {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}

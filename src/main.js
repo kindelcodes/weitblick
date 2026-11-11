@@ -187,7 +187,19 @@ function makeEl(o) {
   if (o.type === "shape") el.classList.add(o.shape);
   if (o.type === "icon") el.innerHTML = iconSvg(o.name);
   if (o.type === "video") el.innerHTML = '<video preload="metadata" playsinline controls></video>';
-  if (o.type === "text") el.addEventListener("blur", () => finishEditing(el));
+  if (o.type === "text") {
+    el.addEventListener("blur", () => finishEditing(el));
+    // In Aufzählungen: Enter beginnt den nächsten Punkt, Tab rückt eine Ebene ein (drei Leerzeichen).
+    el.addEventListener("keydown", (e) => {
+      if (!el.isContentEditable) return;
+      const insert = (t) => {
+        e.preventDefault();
+        document.execCommand("insertText", false, t);
+      };
+      if (e.key === "Tab" && !e.shiftKey) insert("   ");
+      else if (e.key === "Enter" && !e.shiftKey && /^ *• /m.test(el.innerText)) insert("\n• ");
+    });
+  }
   updateEl(o, el);
   return el;
 }
@@ -379,19 +391,24 @@ function applyBackground() {
 // Parallaxe: Das Bild wandert langsamer als die Leinwand mit und zoomt nur leicht, bezogen auf den Überblick.
 // Kapitel wie in Prezi Next: o.cover ist nur von außen sichtbar, o.inside nur von innen. Dazwischen wird
 // überblendet, je nachdem wie weit die Kamera in den Rahmen hineingezoomt ist.
+// Sichtbarkeit (0..1) eines Kapitel-Objekts bei Kamera cam und Bildseitenverhältnis aspect (Breite/Höhe).
+function zoomFade(o, cam, aspect) {
+  const insideness = (id) => {
+    const fr = byId.get(id);
+    // zone: Bereich aller Kinder eines Prezi-Kapitels, relativ zum Rahmen
+    const f = fr?.zone ? { x: fr.x + fr.zone.x, y: fr.y + fr.zone.y, w: fr.zone.w, h: fr.zone.h } : fr;
+    if (!f || cam.cx < f.x || cam.cx > f.x + f.w || cam.cy < f.y || cam.cy > f.y + f.h) return 0;
+    // Wie stark füllt der Bereich das Bild? Maßgeblich ist die knappere Kante (Breite oder Höhe).
+    const r = Math.min(cam.w / f.w, cam.w / aspect / f.h);
+    return clamp((3 - r) / 1.5, 0, 1); // ganz drinnen ab 1,5-facher, draußen ab 3-facher Größe
+  };
+  return (o.cover ? 1 - insideness(o.cover) : 1) * (o.inside ? insideness(o.inside) : 1);
+}
+
 function updateCovers() {
   for (const o of doc.objects) {
     if (!o.cover && !o.inside) continue;
-    const insideness = (id) => {
-      const fr = byId.get(id);
-      // zone: Bereich aller Kinder eines Prezi-Kapitels, relativ zum Rahmen
-      const f = fr?.zone ? { x: fr.x + fr.zone.x, y: fr.y + fr.zone.y, w: fr.zone.w, h: fr.zone.h } : fr;
-      if (!f || camera.cx < f.x || camera.cx > f.x + f.w || camera.cy < f.y || camera.cy > f.y + f.h) return 0;
-      // Wie stark füllt der Bereich das Bild? Maßgeblich ist die knappere Kante (Breite oder Höhe).
-      const r = Math.min(camera.w / f.w, (camera.w * viewport.clientHeight) / viewport.clientWidth / f.h);
-      return clamp((3 - r) / 1.5, 0, 1); // ganz drinnen ab 1,5-facher, draußen ab 3-facher Größe
-    };
-    const k = (o.cover ? 1 - insideness(o.cover) : 1) * (o.inside ? insideness(o.inside) : 1);
+    const k = zoomFade(o, camera, viewport.clientWidth / viewport.clientHeight);
     const el = elOf(o);
     el?.style.setProperty("--zoomfade", k);
     el?.classList.toggle("zoom-hidden", k === 0);
@@ -967,6 +984,7 @@ function updateToolbar() {
     roleSelect.value = selected.role ?? "body";
     document.getElementById("btn-bold").classList.toggle("on", textWeight(selected) >= 600);
     document.getElementById("btn-italic").classList.toggle("on", textItalic(selected));
+    document.getElementById("btn-list").classList.toggle("on", isBulleted(selected));
     document.getElementById("btn-align").textContent = ALIGN_ICONS[selected.align ?? "left"];
   }
 }
@@ -1076,6 +1094,21 @@ function toggleItalic() {
   if (selected?.type !== "text") return;
   const italic = !textItalic(selected);
   format((o) => (o.italic = italic), isText);
+}
+
+// Aufzählung an/aus: jede nicht leere Zeile bekommt „• “ (oder verliert es). Tiefer einrücken: drei Leerzeichen
+// vor dem Punkt, beim Bearbeiten mit Tab (siehe startEditing).
+const isBulleted = (o) => o.text.split("\n").filter((l) => l.trim()).every((l) => /^ *• /.test(l));
+
+function toggleBullets() {
+  if (selected?.type !== "text") return;
+  const on = !isBulleted(selected);
+  format((o) => {
+    o.text = o.text
+      .split("\n")
+      .map((l) => (!l.trim() ? l : on ? (/^ *• /.test(l) ? l : `• ${l}`) : l.replace(/^ *• /, "")))
+      .join("\n");
+  }, isText);
 }
 
 function cycleAlign() {
@@ -1620,6 +1653,7 @@ async function save() {
       media: usedMedia(),
     });
     markSaved();
+    clearRecovery();
     rememberRecent(currentPath);
   } catch (err) {
     await tauri.dialog.message(String(err), { title: "Speichern fehlgeschlagen", kind: "error" });
@@ -1692,6 +1726,10 @@ async function importPath(path) {
   try {
     document.body.classList.add("busy");
     const entries = await tauri.core.invoke("read_zip", { path, filter: prezi ? "contents.portable/" : null, skip: prezi ? "contents.portable/videos/thumb_" : null });
+    // PowerPoint: EMF/WMF-Vorschaubilder (eingebettete Objekte) vorab in PNG umwandeln, soweit möglich.
+    if (!prezi) {
+      for (const e of entries.filter((e) => /\.(emf|wmf)$/i.test(e.name) && e.data)) e.png = await tauri.core.invoke("emf_to_png", { data: e.data }).catch(() => null);
+    }
     const title = path.split(/[\\/]/).pop().replace(/\.(pptx|zip)$/i, "");
     const result = await (prezi ? importPrezi : importPptx)(entries, title, structuredClone(demo.theme));
     // Ungespeichert öffnen: beim ersten Speichern fragt Weitblick nach dem Namen der .weitblick-Datei.
@@ -1740,10 +1778,63 @@ async function fitImportedTexts() {
   }
 }
 
+// ---------- PDF (über den Druckdialog) ----------
+// Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Gedruckt wird
+// mit dem Druckdialog des Systems („Microsoft Print to PDF“ bzw. „Als PDF speichern“) – so bleiben Texte
+// und Formen Vektoren und die eingebetteten Schriften stimmen.
+const PRINT_W = 1280;
+
+function printDeck() {
+  if (isEditing()) document.activeElement.blur();
+  const aspect = aspectRatio();
+  const H = Math.round(PRINT_W / aspect);
+  const deck = document.createElement("div");
+  deck.id = "print-deck";
+  const style = document.createElement("style");
+  style.textContent = `@page { size: ${PRINT_W}px ${H}px; margin: 0; } #print-deck .print-page { width: ${PRINT_W}px; height: ${H}px; }`;
+  deck.append(style);
+  doc.path.forEach((_, i) => {
+    const cam = stepCamera(i);
+    const hidden = hiddenAt(i);
+    const page = document.createElement("div");
+    page.className = "print-page";
+    page.style.backgroundColor = doc.theme.background;
+    const bg = bgLayer.cloneNode(false);
+    bg.removeAttribute("id");
+    bg.style.transform = "";
+    page.append(bg);
+    const w = world.cloneNode(true);
+    w.removeAttribute("id");
+    const z = PRINT_W / cam.w;
+    w.style.transform = `translate(${PRINT_W / 2}px, ${H / 2}px) rotate(${-(cam.rot ?? 0)}deg) scale(${z}) translate(${-cam.cx}px, ${-cam.cy}px)`;
+    w.style.setProperty("--inv", 1 / z);
+    for (const el of w.querySelectorAll(".obj")) {
+      const o = byId.get(el.dataset.id);
+      el.classList.remove("selected", "frame-member", "anim-hidden", "zoom-hidden");
+      el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove());
+      if (!o || hidden.has(o.id)) el.style.display = "none";
+      else if (o.cover || o.inside) el.style.setProperty("--zoomfade", zoomFade(o, cam, aspect));
+    }
+    page.append(w);
+    deck.append(page);
+  });
+  document.body.append(deck);
+  document.body.classList.add("printing");
+  const done = () => {
+    deck.remove();
+    document.body.classList.remove("printing");
+    removeEventListener("afterprint", done);
+  };
+  addEventListener("afterprint", done);
+  // Bilder und Schriften der Kopien sind schon geladen; kurz warten, bis sie gezeichnet sind.
+  setTimeout(() => print(), 300);
+}
+
 function showExportMenu() {
   const b = document.getElementById("btn-export").getBoundingClientRect();
   buildMenu(
     [
+      { label: "PDF (über Drucken) …", run: printDeck },
       { label: "PowerPoint mit Morph-Übergängen …", run: () => exportPptx(true) },
       { label: "PowerPoint klassisch …", run: () => exportPptx(false) },
       "-",
@@ -1771,6 +1862,7 @@ async function openPath(path) {
 
 // Ein Dokument anzeigen: Medien und Schriften laden, Verlauf und Auswahl zurücksetzen.
 function loadDocument(loaded, path, mediaList = []) {
+  clearRecovery(); // die bisherige Präsentation wurde gespeichert oder bewusst verworfen
   clearMedia();
   for (const m of mediaList) addMedia(m.name, m.data);
   doc = loaded;
@@ -2626,6 +2718,7 @@ function objectMenu(at) {
     selection.some((o) => o.group) && { label: "Gruppierung aufheben", keys: "Strg+Umschalt+G", run: ungroupSelection },
     frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
     selection.some((o) => o.type !== "frame" && inAnyFrame(o)) && { label: "Aus dem Rahmen lösen", run: removeFromFrame },
+    one?.type === "image" && { label: "Zuschneiden …", run: () => openCrop(one) },
     one?.type === "image" && { label: "Als Hintergrund verwenden", run: imageToBackground },
     one?.source && { label: "Original bearbeiten", run: () => editSource(one) },
     one?.type === "image" && { label: one.source ? "Andere Originaldatei verknüpfen …" : "Originaldatei verknüpfen …", run: () => attachSource(one) },
@@ -2818,6 +2911,7 @@ on("btn-back", () => reorder("back"));
 on("btn-frame-add", addToFrame);
 on("btn-frame-remove", removeFromFrame);
 on("btn-italic", toggleItalic);
+on("btn-list", toggleBullets);
 on("btn-align", cycleAlign);
 on("btn-undo", undo);
 on("btn-redo", redo);
@@ -2825,6 +2919,7 @@ on("btn-redo", redo);
 // Vor dem Schließen nachfragen, wenn noch etwas ungespeichert ist.
 appWindow?.onCloseRequested(async (event) => {
   if (!(await confirmDiscard())) event.preventDefault();
+  else clearRecovery(); // bewusst beendet: nichts wiederherzustellen
 });
 
 // Bilddateien aus dem Explorer auf die Leinwand ziehen.
@@ -2841,6 +2936,133 @@ new ResizeObserver(() => {
   if (presenting && !offPath && !camera.anim) camera.set(stepCamera(pathIndex));
   else render();
 }).observe(viewport);
+
+// ---------- Bild zuschneiden ----------
+// Dialog mit dem ganzen Bild und einem Ausschnitt-Rechteck (verschieben, an den Ecken ziehen). Übernommen wird
+// o.crop (Anteile des Originalbilds); das Bild behält seinen Maßstab, der sichtbare Teil bleibt an seinem Platz.
+
+function openCrop(o) {
+  const m = media.get(o.src);
+  if (!m) return;
+  const old = o.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+  let c = { ...old };
+  const overlay = document.createElement("div");
+  overlay.className = "crop-dialog";
+  overlay.innerHTML = `<div class="crop-box"><div class="crop-stage"><img alt=""><div class="crop-rect">${["nw", "ne", "sw", "se"].map((k) => `<span class="crop-h" data-k="${k}"></span>`).join("")}</div></div>
+    <div class="crop-buttons"><button data-a="reset">Ganzes Bild</button><span></span><button data-a="cancel">Abbrechen</button><button data-a="ok" class="primary">Übernehmen</button></div></div>`;
+  const img = overlay.querySelector("img");
+  const rect = overlay.querySelector(".crop-rect");
+  img.src = m.url;
+  const draw = () => Object.assign(rect.style, { left: `${c.x * 100}%`, top: `${c.y * 100}%`, width: `${c.w * 100}%`, height: `${c.h * 100}%` });
+  draw();
+  let drag = null;
+  overlay.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".crop-rect")) return;
+    e.preventDefault();
+    drag = { k: e.target.dataset.k ?? "move", x: e.clientX, y: e.clientY, c: { ...c }, r: img.getBoundingClientRect() };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.x) / drag.r.width;
+    const dy = (e.clientY - drag.y) / drag.r.height;
+    const s = drag.c;
+    const min = 0.03;
+    if (drag.k === "move") {
+      c.x = clamp(s.x + dx, 0, 1 - s.w);
+      c.y = clamp(s.y + dy, 0, 1 - s.h);
+    } else {
+      let [x0, y0, x1, y1] = [s.x, s.y, s.x + s.w, s.y + s.h];
+      if (drag.k.includes("w")) x0 = clamp(x0 + dx, 0, x1 - min);
+      if (drag.k.includes("e")) x1 = clamp(x1 + dx, x0 + min, 1);
+      if (drag.k.includes("n")) y0 = clamp(y0 + dy, 0, y1 - min);
+      if (drag.k.includes("s")) y1 = clamp(y1 + dy, y0 + min, 1);
+      c = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    draw();
+  });
+  overlay.addEventListener("pointerup", () => (drag = null));
+  overlay.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "reset") {
+      c = { x: 0, y: 0, w: 1, h: 1 };
+      draw();
+    }
+    if (a === "cancel") overlay.remove();
+    if (a !== "ok") return;
+    overlay.remove();
+    checkpoint();
+    const fullW = o.w / old.w;
+    const fullH = o.h / old.h;
+    o.x += (c.x - old.x) * fullW;
+    o.y += (c.y - old.y) * fullH;
+    o.w = c.w * fullW;
+    o.h = c.h * fullH;
+    if (c.x === 0 && c.y === 0 && c.w === 1 && c.h === 1) delete o.crop;
+    else o.crop = c;
+    updateEl(o);
+    updateToolbar();
+  });
+  overlay.addEventListener("keydown", (e) => e.key === "Escape" && overlay.remove());
+  document.body.append(overlay);
+  overlay.querySelector('[data-a="ok"]').focus();
+}
+
+// ---------- Autospeichern ----------
+// Ungespeicherte Änderungen landen jede Minute in einer Wiederherstellungsdatei im App-Datenordner, nie in
+// der eigenen Datei. Wird Weitblick ohne Speichern beendet (Absturz, Stromausfall), bietet der nächste Start
+// die Wiederherstellung an.
+
+let recoveryPath = null;
+let autosaved = null;
+
+async function autosave() {
+  const snap = snapshot();
+  if (!isDirty() || snap === autosaved) return;
+  recoveryPath ??= await tauri.core.invoke("recovery_path");
+  await tauri.core.invoke("save_presentation", { path: recoveryPath, json: JSON.stringify({ ...doc, version: FORMAT_VERSION }), media: usedMedia() });
+  await tauri.core.invoke("save_recovery", { json: JSON.stringify({ path: currentPath, title: doc.title, time: Date.now() }) });
+  autosaved = snap;
+}
+
+function clearRecovery() {
+  autosaved = null;
+  tauri?.core.invoke("save_recovery", { json: "{}" }).catch(() => {});
+}
+
+// Beim Start: liegt eine Wiederherstellung vor, fragen und sie als ungespeicherte Änderung öffnen.
+async function offerRecovery() {
+  let info;
+  try {
+    info = JSON.parse(await tauri.core.invoke("load_recovery"));
+  } catch {
+    return false;
+  }
+  if (!info?.time) return false;
+  const when = new Date(info.time).toLocaleString("de-DE");
+  const ok = await tauri.dialog.ask(`Weitblick wurde beendet, bevor „${info.title}“ gespeichert war (Stand ${when}). Wiederherstellen?`, {
+    title: "Wiederherstellen",
+    okLabel: "Wiederherstellen",
+    cancelLabel: "Verwerfen",
+  });
+  if (!ok) {
+    clearRecovery();
+    return false;
+  }
+  try {
+    recoveryPath ??= await tauri.core.invoke("recovery_path");
+    const result = await tauri.core.invoke("open_presentation", { path: recoveryPath });
+    loadDocument(JSON.parse(result.json), info.path, result.media);
+    savedSnapshot = null; // gilt als ungespeichert, bis die eigene Datei gespeichert ist
+    showFileName();
+    return true;
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Wiederherstellen fehlgeschlagen", kind: "error" });
+    return false;
+  }
+}
+
+if (tauri) setInterval(() => autosave().catch(() => {}), 60000);
 
 // ---------- Verknüpfte Grafiken (z. B. Graphen aus Origin) ----------
 // o.link = { path, mtime }: die Grafikdatei auf der Festplatte; ändert sie sich, wird das Bild ersetzt.
@@ -3090,5 +3312,5 @@ camera.set(frameState(doc.path[0]));
 // Per Doppelklick auf eine .weitblick-Datei gestartet? Dann gleich diese öffnen, sonst die Startseite zeigen.
 tauri?.core
   .invoke("startup_file")
-  .then((path) => (path ? openPath(path) : showStart()))
+  .then(async (path) => (path ? openPath(path) : (await offerRecovery()) || showStart()))
   .catch(() => {});

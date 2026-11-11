@@ -290,6 +290,22 @@ fn save_recent(app: tauri::AppHandle, json: String) -> Result<(), String> {
     save_app_json(&app, "recent.json", json)
 }
 
+// Autospeichern: Wiederherstellungsdatei und ihre Angaben (Originalpfad, Titel, Zeit) im App-Datenordner.
+#[tauri::command]
+fn recovery_path(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(app_json_file(&app, "autosave.weitblick")?.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn load_recovery(app: tauri::AppHandle) -> Result<String, String> {
+    load_app_json(&app, "recovery.json")
+}
+
+#[tauri::command]
+fn save_recovery(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    save_app_json(&app, "recovery.json", json)
+}
+
 // Für den Startbildschirm: welche der zuletzt geöffneten Dateien gibt es noch?
 #[tauri::command]
 fn existing_files(paths: Vec<String>) -> Vec<bool> {
@@ -312,6 +328,48 @@ fn file_mtimes(paths: Vec<String>) -> Vec<Option<u64>> {
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
     tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("Datei kann nicht geöffnet werden: {e}"))
+}
+
+// EMF/WMF (Vorschaubilder eingebetteter OLE-Objekte in PowerPoint) als PNG; nur unter Windows mit
+// Bordmitteln (System.Drawing über PowerShell), in bis zu dreifacher Größe, damit es beim Zoomen scharf bleibt.
+#[tauri::command]
+fn emf_to_png(data: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let dir = std::env::temp_dir().join("weitblick");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let input = dir.join(format!("ole-{stamp}.emf"));
+        let output = dir.join(format!("ole-{stamp}.png"));
+        std::fs::write(&input, STANDARD.decode(data).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let script = format!(
+            "Add-Type -AssemblyName System.Drawing; $m = New-Object System.Drawing.Imaging.Metafile('{}'); \
+             $s = [Math]::Min(3, 4000 / [Math]::Max($m.Width, $m.Height)); \
+             $b = New-Object System.Drawing.Bitmap([int]($m.Width * $s), [int]($m.Height * $s)); \
+             $g = [System.Drawing.Graphics]::FromImage($b); $g.SmoothingMode = 'AntiAlias'; \
+             $g.DrawImage($m, 0, 0, $b.Width, $b.Height); $b.Save('{}', [System.Drawing.Imaging.ImageFormat]::Png)",
+            input.display(),
+            output.display()
+        );
+        let status = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000) // kein Konsolenfenster
+            .status()
+            .map_err(|e| e.to_string())?;
+        let png = std::fs::read(&output);
+        let _ = std::fs::remove_file(&input);
+        let _ = std::fs::remove_file(&output);
+        if !status.success() {
+            return Err("Vorschaubild ließ sich nicht umwandeln".into());
+        }
+        Ok(STANDARD.encode(png.map_err(|e| e.to_string())?))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = data;
+        Err("EMF-Vorschaubilder werden nur unter Windows umgewandelt".into())
+    }
 }
 
 // Eingebettete Originaldatei zum Bearbeiten in den Temp-Ordner legen; liefert den Pfad.
@@ -350,7 +408,11 @@ pub fn run() {
             load_recent,
             save_recent,
             existing_files,
+            recovery_path,
+            load_recovery,
+            save_recovery,
             file_mtimes,
+            emf_to_png,
             open_file,
             write_temp,
             write_zip,

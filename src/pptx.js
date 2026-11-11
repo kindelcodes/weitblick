@@ -731,20 +731,25 @@ export function importPptx(entries, title, baseTheme) {
     }
 
     function picture(el, tf) {
-      const x = readXfrm(kid(kid(el, "spPr"), "xfrm"));
-      const embed = desc(el, "blip")[0]?.getAttributeNS(NS.r, "embed");
+      image(readXfrm(kid(kid(el, "spPr"), "xfrm")), desc(el, "blip")[0], tf);
+    }
+
+    // Bild aus einem blip; EMF/WMF nur, wenn sie vorab als PNG umgewandelt wurden (entry.png). Liefert true bei Erfolg.
+    function image(x, blip, tf) {
+      const embed = blip?.getAttributeNS(NS.r, "embed");
       const target = embed && rels.get(embed)?.target;
       const entry = target && files.get(target);
-      if (!x || !entry?.data) return;
-      const ext = target.split(".").pop().toLowerCase();
+      if (!x || !entry?.data) return false;
+      const ext = entry.png ? "png" : target.split(".").pop().toLowerCase();
       if (!["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp"].includes(ext)) {
         skipped.add(`Bilder im Format ${ext.toUpperCase()}`);
-        return;
+        return false;
       }
       const o = place(tf(x), { id: id("i"), type: "image" });
       o.src = `media/${o.id}.${ext}`;
-      media.push({ name: o.src, data: entry.data });
+      media.push({ name: o.src, data: entry.png ?? entry.data });
       objects.push(o);
+      return true;
     }
 
     function table(el, tf) {
@@ -767,6 +772,11 @@ export function importPptx(entries, title, baseTheme) {
           }
         }
         skipped.add("SmartArt ohne gespeicherte Zeichnung (als Platzhalter)");
+      }
+      // Eingebettetes Objekt (OLE, z. B. ein Origin-Graph): PowerPoint legt ein Vorschaubild bei.
+      if (!tbl && !dm && desc(el, "oleObj").length) {
+        if (image(x, desc(el, "blip")[0], tf)) return;
+        skipped.add("Vorschaubilder eingebetteter Objekte (unter Linux nicht umwandelbar)");
       }
       if (!tbl) {
         if (!dm) skipped.add("Diagramme aus PowerPoint (als Platzhalter)");

@@ -56,6 +56,11 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | PowerPoint importieren | „Öffnen“ und eine .pptx wählen (oder „Export ▾“ → importieren): jede Folie wird ein Rahmen samt Pfadschritt |
 | Prezi importieren | In Prezi „Offline-Präsentation herunterladen“ (Portable Prezi, .zip), dann in Weitblick „Öffnen“ und die .zip wählen: Leinwand, Rahmen, Kapitel, Texte, Bilder (mit Zuschnitt), Formen, Linien, Grafiken (als SVG), Hintergrund, Schriften, Pfad und Einblendungen kommen an derselben Stelle an – aus Prezi Next wie aus Prezi Classic. Das Prezi-Programm im Archiv wird nicht gestartet; Videos bleiben vorerst Platzhalter |
 | Startseite | Beim Start und über „Start“: die zuletzt geöffneten Präsentationen mit Vorschaubild, dazu Neu, Öffnen und Beispiel |
+| Autospeichern | Ungespeicherte Änderungen landen jede Minute in einer Wiederherstellungsdatei (nicht in deiner Datei); nach einem Absturz bietet der nächste Start die Wiederherstellung an |
+| PDF | „Export ▾“ → „PDF (über Drucken) …“: eine Seite pro Pfadschritt, im Druckdialog „Microsoft Print to PDF“ bzw. „Als PDF speichern“ wählen |
+| Aufzählung | Knopf •≡ in der Formatleiste; beim Bearbeiten beginnt Enter einen neuen Punkt, Tab rückt eine Ebene ein |
+| Bild zuschneiden | Rechtsklick auf ein Bild → „Zuschneiden …“: Ausschnitt verschieben oder an den Ecken ziehen |
+| PowerPoint mit eingebetteten Objekten | Origin-Graphen und andere OLE-Objekte kommen mit ihrem Vorschaubild an (EMF wird unter Windows in PNG umgewandelt) |
 | Graph aus Origin (verknüpfte Grafik) | Rechtsklick auf die freie Leinwand → „Verknüpfte Grafik einfügen …“: SVG/PNG wählen, optional die Originaldatei (.opju) dazu. Speichert Origin die Grafik neu, aktualisiert sie sich in Weitblick sofort; Rechtsklick → „Original bearbeiten“ öffnet das Projekt in Origin (oder die eingebettete Kopie, falls die Datei fehlt) |
 | Neue Präsentation | „Neu“ oder Strg+N |
 | Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile und eigene Stilkits, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 38 Formen in 6 Gruppen (inkl. Weltkarte), über 2.000 Symbole, 15 Inhaltsblöcke, Google-Schriften |
