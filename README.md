@@ -57,7 +57,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Prezi importieren | In Prezi „Offline-Präsentation herunterladen“ (Portable Prezi, .zip), dann in Weitblick „Öffnen“ und die .zip wählen: Leinwand, Rahmen, Kapitel, Texte, Bilder (mit Zuschnitt), Formen, Linien, Grafiken (als SVG), Hintergrund, Schriften, Pfad und Einblendungen kommen an derselben Stelle an – aus Prezi Next wie aus Prezi Classic. Das Prezi-Programm im Archiv wird nicht gestartet; Videos bleiben vorerst Platzhalter |
 | Startseite | Beim Start und über „Start“: die zuletzt geöffneten Präsentationen mit Vorschaubild, dazu Neu, Öffnen und Beispiel |
 | Autospeichern | Ungespeicherte Änderungen landen jede Minute in einer Wiederherstellungsdatei (nicht in deiner Datei); nach einem Absturz bietet der nächste Start die Wiederherstellung an |
-| PDF | „Export ▾“ → „PDF (über Drucken) …“: eine Seite pro Pfadschritt, im Druckdialog „Microsoft Print to PDF“ bzw. „Als PDF speichern“ wählen |
+| PDF | „Export ▾“ → „PDF (über Drucken) …“: eine Seite pro Pfadschritt, im Druckdialog als Ziel „Als PDF speichern“ wählen (randlos im Seitenformat der Präsentation; „Microsoft Print to PDF“ kennt nur Papierformate wie A4 und lässt einen Rand) |
 | Aufzählung | Knopf •≡ in der Formatleiste; beim Bearbeiten beginnt Enter einen neuen Punkt, Tab rückt eine Ebene ein |
 | Bild zuschneiden | Rechtsklick auf ein Bild → „Zuschneiden …“: Ausschnitt verschieben oder an den Ecken ziehen |
 | PowerPoint mit eingebetteten Objekten | Origin-Graphen und andere OLE-Objekte kommen mit ihrem Vorschaubild an (EMF wird unter Windows in PNG umgewandelt) |

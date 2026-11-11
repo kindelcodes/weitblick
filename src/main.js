@@ -1780,8 +1780,8 @@ async function fitImportedTexts() {
 
 // ---------- PDF (über den Druckdialog) ----------
 // Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Gedruckt wird
-// mit dem Druckdialog des Systems („Microsoft Print to PDF“ bzw. „Als PDF speichern“) – so bleiben Texte
-// und Formen Vektoren und die eingebetteten Schriften stimmen.
+// mit dem Druckdialog, Ziel „Als PDF speichern“ – so bleiben Texte und Formen Vektoren und die eingebetteten
+// Schriften stimmen. Nur dieses Ziel übernimmt @page size; Druckertreiber wie „Microsoft Print to PDF“ nehmen A4.
 const PRINT_W = 1280;
 
 function printDeck() {
