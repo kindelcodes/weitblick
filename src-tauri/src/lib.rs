@@ -383,6 +383,56 @@ fn write_temp(name: String, data: String) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
+// PDF direkt aus der WebView (WebView2): Seitengröße in Zoll, randlos, mit Hintergründen.
+// Gedruckt wird mit den @media-print-Regeln, die Seite muss den Druckstapel also schon enthalten.
+#[cfg(windows)]
+#[tauri::command]
+async fn export_pdf(webview: tauri::Webview, path: String, width: f64, height: f64) -> Result<(), String> {
+    use webview2_com::{Microsoft::Web::WebView2::Win32::*, PrintToPdfCompletedHandler};
+    use windows_core::{Interface, HSTRING};
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let fail = tx.clone();
+    webview
+        .with_webview(move |pw| {
+            let run = || -> windows_core::Result<()> {
+                unsafe {
+                    let core = pw.controller().CoreWebView2()?.cast::<ICoreWebView2_7>()?;
+                    let settings = pw.environment().cast::<ICoreWebView2Environment6>()?.CreatePrintSettings()?;
+                    settings.SetPageWidth(width)?;
+                    settings.SetPageHeight(height)?;
+                    settings.SetMarginTop(0.0)?;
+                    settings.SetMarginBottom(0.0)?;
+                    settings.SetMarginLeft(0.0)?;
+                    settings.SetMarginRight(0.0)?;
+                    settings.SetShouldPrintBackgrounds(true)?;
+                    settings.SetShouldPrintHeaderAndFooter(false)?;
+                    let handler = PrintToPdfCompletedHandler::create(Box::new(move |hr, ok| {
+                        let _ = tx.send(hr.map_err(|e| e.to_string()).and_then(|_| {
+                            if ok { Ok(()) } else { Err("PDF konnte nicht geschrieben werden".into()) }
+                        }));
+                        Ok(())
+                    }));
+                    core.PrintToPdf(&HSTRING::from(path.as_str()), &settings, &handler)
+                }
+            };
+            if let Err(e) = run() {
+                let _ = fail.send(Err(e.to_string()));
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv().map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// Linux: kein direkter PDF-Weg, die Oberfläche fällt auf den Druckdialog zurück.
+#[cfg(not(windows))]
+#[tauri::command]
+async fn export_pdf(path: String, width: f64, height: f64) -> Result<(), String> {
+    let _ = (path, width, height);
+    Err("unsupported".into())
+}
+
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
 #[tauri::command]
 fn startup_file() -> Option<String> {
@@ -415,6 +465,7 @@ pub fn run() {
             emf_to_png,
             open_file,
             write_temp,
+            export_pdf,
             write_zip,
             read_zip
         ])

@@ -1778,20 +1778,30 @@ async function fitImportedTexts() {
   }
 }
 
-// ---------- PDF (über den Druckdialog) ----------
-// Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Gedruckt wird
-// mit dem Druckdialog, Ziel „Als PDF speichern“ – so bleiben Texte und Formen Vektoren und die eingebetteten
-// Schriften stimmen. Nur dieses Ziel übernimmt @page size; Druckertreiber wie „Microsoft Print to PDF“ nehmen A4.
+// ---------- PDF ----------
+// Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Unter Windows
+// schreibt WebView2 das PDF direkt (randlos, Seitengröße der Präsentation), sonst der Druckdialog.
+// Texte und Formen bleiben Vektoren, die eingebetteten Schriften stimmen.
 const PRINT_W = 1280;
 
-function printDeck() {
+async function printDeck() {
   if (isEditing()) document.activeElement.blur();
+  const base = (currentPath?.split(/[\\/]/).pop() ?? `${doc.title}.weitblick`).replace(/\.weitblick$/i, "");
+  // Windows: direkt als PDF in Seitengröße der Präsentation; sonst (Linux) über den Druckdialog.
+  const direct = navigator.userAgent.includes("Windows");
+  let target = null;
+  if (direct) {
+    target = await tauri.dialog.save({ filters: [{ name: "PDF", extensions: ["pdf"] }], defaultPath: `${base}.pdf` });
+    if (!target) return;
+    if (!target.toLowerCase().endsWith(".pdf")) target += ".pdf";
+  }
   const aspect = aspectRatio();
   const H = Math.round(PRINT_W / aspect);
   const deck = document.createElement("div");
   deck.id = "print-deck";
   const style = document.createElement("style");
-  style.textContent = `@page { size: ${PRINT_W}px ${H}px; margin: 0; } #print-deck .print-page { width: ${PRINT_W}px; height: ${H}px; }`;
+  style.textContent = `@page { size: ${PRINT_W}px ${H}px; margin: 0; } #print-deck .print-page { width: ${PRINT_W}px; height: ${H}px; zoom: calc(100vw / ${PRINT_W}px); }`;
+  // zoom: WebView2 setzt die Seite beim PDF-Druck nicht mit 96 px/Zoll (gemessen: 1920 statt 1280 px Breite).
   deck.append(style);
   doc.path.forEach((_, i) => {
     const cam = stepCamera(i);
@@ -1822,19 +1832,32 @@ function printDeck() {
   document.body.classList.add("printing");
   const done = () => {
     deck.remove();
-    document.body.classList.remove("printing");
+    document.body.classList.remove("printing", "busy");
     removeEventListener("afterprint", done);
   };
-  addEventListener("afterprint", done);
   // Bilder und Schriften der Kopien sind schon geladen; kurz warten, bis sie gezeichnet sind.
-  setTimeout(() => print(), 300);
+  await new Promise((r) => setTimeout(r, 300));
+  if (!direct) {
+    addEventListener("afterprint", done);
+    print();
+    return;
+  }
+  try {
+    document.body.classList.add("busy");
+    await tauri.core.invoke("export_pdf", { path: target, width: PRINT_W / 96, height: H / 96 });
+    await tauri.dialog.message(`${doc.path.length} Seiten als PDF gespeichert.`, { title: "PDF-Export", kind: "info" });
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "PDF-Export fehlgeschlagen", kind: "error" });
+  } finally {
+    done();
+  }
 }
 
 function showExportMenu() {
   const b = document.getElementById("btn-export").getBoundingClientRect();
   buildMenu(
     [
-      { label: "PDF (über Drucken) …", run: printDeck },
+      { label: "PDF …", run: printDeck },
       { label: "PowerPoint mit Morph-Übergängen …", run: () => exportPptx(true) },
       { label: "PowerPoint klassisch …", run: () => exportPptx(false) },
       "-",

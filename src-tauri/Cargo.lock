@@ -4546,6 +4546,8 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "ureq",
+ "webview2-com",
+ "windows-core",
  "zip",
 ]
 
