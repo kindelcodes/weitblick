@@ -6,7 +6,7 @@ Statt Folie für Folie liegt alles auf einer Leinwand. **Rahmen** markieren Auss
 ein **Pfad** legt die Reihenfolge fest, und die Kamera fliegt weich von Rahmen zu Rahmen.
 Weit entfernte Ziele fliegt sie im Bogen an (erst heraus-, dann hineinzoomen), nahe Ziele direkt.
 
-> Frühes Entwicklungsstadium. Es fehlen u. a. Sprechernotizen.
+> Frühes Entwicklungsstadium.
 
 ## Installieren
 
@@ -72,6 +72,8 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
 | Zweiter Bildschirm / Beamer | Mit mehreren Bildschirmen läuft die Präsentation auf dem anderen; im Menü ▾ neben „Präsentieren“ lässt sich der Bildschirm wählen |
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
+| Notizen | Feld „Notizen“ unter der Pfadliste: gilt für den aktuellen Pfadschritt und wandert beim Umsortieren mit |
+| Referentenansicht | Läuft die Präsentation auf dem anderen Bildschirm, öffnet sich auf deinem ein Fenster mit Notizen, nächstem Schritt, Uhr und Laufzeit (Klick setzt zurück); Pfeiltasten, Weiter/Zurück und Esc steuern von dort |
 | Präsentation beenden | Esc |
 
 ## Dateiformat `.weitblick`

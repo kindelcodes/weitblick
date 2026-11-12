@@ -659,6 +659,85 @@ function hidePathPreview() {
 
 function markActive() {
   [...pathList.children].forEach((li, i) => li.classList.toggle("active", i === pathIndex));
+  if (document.activeElement !== notesBox) notesBox.value = noteHolder(pathIndex)?.notes ?? "";
+  notesBox.disabled = !doc.path.length;
+  sendPresenter();
+}
+
+// ---------- Notizen ----------
+// Notizen hängen am Objekt eines Kamera-Schritts bzw. am Animationsschritt selbst – so wandern sie beim
+// Umsortieren mit und sind Teil von Rückgängig.
+const notesBox = document.getElementById("step-notes");
+let notesBefore = null;
+
+function noteHolder(i) {
+  const s = doc.path[i];
+  return isAnim(s) ? s : byId.get(s);
+}
+
+notesBox.addEventListener("focus", () => (notesBefore = snapshot()));
+notesBox.addEventListener("input", () => {
+  const h = noteHolder(pathIndex);
+  if (!h) return;
+  if (notesBox.value.trim()) h.notes = notesBox.value;
+  else delete h.notes;
+});
+notesBox.addEventListener("blur", () => {
+  if (notesBefore && snapshot() !== notesBefore) checkpoint(notesBefore);
+  notesBefore = null;
+});
+// Tippen in den Notizen darf keine Tastenkürzel der Leinwand auslösen.
+notesBox.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Escape") notesBox.blur();
+});
+
+// ---------- Referentenansicht ----------
+// Ein zweites Fenster auf dem eigenen Bildschirm: Notizen, aktueller und nächster Schritt, Zeit.
+// Es bekommt den Stand per Ereignis und schickt Weiter/Zurück/Beenden zurück.
+let presenterOpen = false;
+
+function stepName(i) {
+  const s = doc.path[i];
+  if (s === undefined) return "";
+  return isAnim(s) ? animLabel(s) : (stepLabel(byId.get(s)) ?? s);
+}
+
+function sendPresenter() {
+  if (!presenterOpen) return;
+  tauri.event
+    .emitTo("presenter", "presenter-state", {
+      index: pathIndex,
+      total: doc.path.length,
+      title: stepName(pathIndex),
+      notes: noteHolder(pathIndex)?.notes ?? "",
+      next: stepName(pathIndex + 1),
+    })
+    .catch(() => {});
+}
+
+async function openPresenter(monitor) {
+  const s = monitor.scaleFactor || 1;
+  try {
+    new tauri.webviewWindow.WebviewWindow("presenter", {
+      url: "presenter.html",
+      title: "Weitblick – Referentenansicht",
+      x: monitor.position.x / s + 40,
+      y: monitor.position.y / s + 40,
+      width: 1000,
+      height: 650,
+      maximized: true,
+    });
+    presenterOpen = true;
+  } catch (err) {
+    window.__screenError = String(err?.message ?? err);
+  }
+}
+
+async function closePresenter() {
+  if (!presenterOpen) return;
+  presenterOpen = false;
+  (await tauri.webviewWindow.WebviewWindow.getByLabel("presenter"))?.destroy().catch(() => {});
 }
 
 // Ein gedrehter Rahmen wird aufrecht angeflogen: die Kamera dreht sich mit.
@@ -2646,7 +2725,10 @@ async function startPresentation(fromCurrent) {
   select(null);
   presenting = true;
   document.body.classList.add("presenting");
+  const { cur } = await monitors();
   await moveToPresentationScreen();
+  // Nur wenn die Präsentation auf einen anderen Bildschirm gewandert ist, bleibt Platz für die Referentenansicht.
+  if (windowBefore && cur) openPresenter(cur);
   await setFullscreen(true);
   // Erst wenn das Fenster seine neue Größe hat, passt der Ausschnitt.
   requestAnimationFrame(() => {
@@ -2661,8 +2743,19 @@ async function stopPresentation() {
   document.body.classList.remove("presenting", "show-controls");
   applyVisibility(pathIndex); // im Editor ist alles sichtbar
   for (const v of world.querySelectorAll(".obj.video video")) v.pause();
+  closePresenter();
   await setFullscreen(false);
   await restoreWindow();
+}
+
+if (tauri?.event) {
+  tauri.event.listen("presenter-ready", sendPresenter);
+  tauri.event.listen("presenter-cmd", ({ payload }) => {
+    if (!presenting) return;
+    if (payload === "next") goTo(pathIndex + 1);
+    else if (payload === "prev") goTo(pathIndex - 1);
+    else if (payload === "stop") stopPresentation();
+  });
 }
 
 // Die Steuerleiste erscheint bei Mausbewegung und verschwindet nach zwei Sekunden Ruhe.

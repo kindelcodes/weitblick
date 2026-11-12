@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Weitblick – Referentenansicht</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #16181d; color: #e8e8ea; font: 16px system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: auto 1fr auto; }
+      header, footer { display: flex; align-items: center; gap: 24px; padding: 14px 24px; background: #20232a; }
+      header .step { font-size: 14px; opacity: 0.7; }
+      header .title { font-size: 22px; font-weight: 600; flex: 1; }
+      .time { font-variant-numeric: tabular-nums; font-size: 28px; }
+      .clock { font-variant-numeric: tabular-nums; opacity: 0.7; }
+      #notes { padding: 24px 32px; font-size: 26px; line-height: 1.45; white-space: pre-wrap; overflow-y: auto; }
+      #notes.empty { opacity: 0.4; font-style: italic; }
+      footer .next { flex: 1; opacity: 0.8; }
+      button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid #444; background: #2b2f38; color: inherit; cursor: pointer; }
+      button:hover { background: #363b46; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="step" id="step"></span>
+      <span class="title" id="title"></span>
+      <span class="clock" id="clock"></span>
+      <span class="time" id="time" title="Seit Beginn (Klick setzt zurück)">0:00</span>
+    </header>
+    <div id="notes"></div>
+    <footer>
+      <span class="next" id="next"></span>
+      <button data-cmd="prev">◀ Zurück</button>
+      <button data-cmd="next">Weiter ▶</button>
+      <button data-cmd="stop">Beenden</button>
+    </footer>
+    <script>
+      const { emit, listen } = window.__TAURI__.event;
+      const $ = (id) => document.getElementById(id);
+      let start = Date.now();
+      const two = (n) => String(n).padStart(2, "0");
+      setInterval(() => {
+        const s = Math.floor((Date.now() - start) / 1000);
+        $("time").textContent = s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+        const d = new Date();
+        $("clock").textContent = `${two(d.getHours())}:${two(d.getMinutes())}`;
+      }, 500);
+      $("time").addEventListener("click", () => (start = Date.now()));
+      listen("presenter-state", ({ payload: p }) => {
+        $("step").textContent = `${p.index + 1} / ${p.total}`;
+        $("title").textContent = p.title;
+        $("notes").textContent = p.notes || "Keine Notizen zu diesem Schritt.";
+        $("notes").classList.toggle("empty", !p.notes);
+        $("next").textContent = p.next ? `Als Nächstes: ${p.next}` : "Letzter Schritt";
+      });
+      const send = (cmd) => emit("presenter-cmd", cmd);
+      for (const b of document.querySelectorAll("button")) b.addEventListener("click", () => send(b.dataset.cmd));
+      addEventListener("keydown", (e) => {
+        if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) send("next");
+        else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) send("prev");
+        else if (e.key === "Escape") send("stop");
+        else return;
+        e.preventDefault();
+      });
+      emit("presenter-ready");
+    </script>
+  </body>
+</html>

@@ -945,6 +945,25 @@ body.presenting:not(.show-controls) .viewport {
   padding: 0;
 }
 
+.notes-head {
+  display: block;
+  margin-top: 16px;
+}
+
+#step-notes {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--bg, transparent);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 #path-list li {
   display: flex;
   align-items: center;
