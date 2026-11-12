@@ -958,7 +958,7 @@ body.presenting:not(.show-controls) .viewport {
   font: inherit;
   font-size: 13px;
   color: inherit;
-  background: var(--bg, transparent);
+  background: #fff;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 6px 8px;
@@ -1452,6 +1452,9 @@ body.presenting .obj.video video {
   #print-deck .print-page {
     position: relative;
     overflow: hidden;
+    /* Macht die Seite unteilbar; sonst zerschneidet der Seitenumbruch große Objekte nach ihrer Lage
+       vor der Kamera-Transformation. */
+    contain: strict;
     break-after: page;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
