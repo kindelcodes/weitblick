@@ -365,10 +365,27 @@ fn emf_to_png(data: String) -> Result<String, String> {
         }
         Ok(STANDARD.encode(png.map_err(|e| e.to_string())?))
     }
+    // Linux: mit LibreOffice, falls installiert (soffice kennt EMF/WMF).
     #[cfg(not(windows))]
     {
-        let _ = data;
-        Err("EMF-Vorschaubilder werden nur unter Windows umgewandelt".into())
+        let dir = std::env::temp_dir().join("weitblick");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let input = dir.join(format!("ole-{stamp}.emf"));
+        let output = dir.join(format!("ole-{stamp}.png"));
+        std::fs::write(&input, STANDARD.decode(data).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let status = std::process::Command::new("soffice")
+            .args(["--headless", "--convert-to", "png", "--outdir"])
+            .arg(&dir)
+            .arg(&input)
+            .status();
+        let png = std::fs::read(&output);
+        let _ = std::fs::remove_file(&input);
+        let _ = std::fs::remove_file(&output);
+        match (status, png) {
+            (Ok(s), Ok(png)) if s.success() => Ok(STANDARD.encode(png)),
+            _ => Err("EMF-Vorschaubilder brauchen unter Linux LibreOffice (soffice)".into()),
+        }
     }
 }
 
@@ -425,8 +442,57 @@ async fn export_pdf(webview: tauri::Webview, path: String, width: f64, height: f
         .map_err(|e| e.to_string())?
 }
 
-// Linux: kein direkter PDF-Weg, die Oberfläche fällt auf den Druckdialog zurück.
-#[cfg(not(windows))]
+// Linux (WebKitGTK): Druck in eine Datei ohne Dialog, Papier in Seitengröße der Präsentation, randlos.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn export_pdf(webview: tauri::Webview, path: String, width: f64, height: f64) -> Result<(), String> {
+    use webkit2gtk::{PrintOperation, PrintOperationExt};
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let fail = tx.clone();
+    webview
+        .with_webview(move |pw| {
+            let run = || -> Result<(), String> {
+                let uri = webkit2gtk::glib::filename_to_uri(&path, None).map_err(|e| e.to_string())?;
+                let settings = gtk::PrintSettings::new();
+                settings.set_printer("Print to File");
+                settings.set(gtk::PRINT_SETTINGS_OUTPUT_FILE_FORMAT, Some("pdf"));
+                settings.set(gtk::PRINT_SETTINGS_OUTPUT_URI, Some(uri.as_str()));
+                let paper = gtk::PaperSize::new_custom("weitblick", "Weitblick", width * 25.4, height * 25.4, gtk::Unit::Mm);
+                let setup = gtk::PageSetup::new();
+                setup.set_orientation(gtk::PageOrientation::Portrait);
+                setup.set_paper_size(&paper);
+                for set in [gtk::PageSetup::set_top_margin, gtk::PageSetup::set_bottom_margin, gtk::PageSetup::set_left_margin, gtk::PageSetup::set_right_margin] {
+                    set(&setup, 0.0, gtk::Unit::Mm);
+                }
+                let op = PrintOperation::new(&pw.inner());
+                op.set_print_settings(&settings);
+                op.set_page_setup(&setup);
+                // shortcut: die Handler halten die Operation am Leben (kleiner Kreisverweis pro Export), bis sie fertig ist.
+                let keep = op.clone();
+                let done = tx.clone();
+                op.connect_finished(move |_| {
+                    let _ = &keep;
+                    let _ = done.send(Ok(()));
+                });
+                let failed = tx.clone();
+                op.connect_failed(move |_, e| {
+                    let _ = failed.send(Err(e.to_string()));
+                });
+                op.print();
+                Ok(())
+            };
+            if let Err(e) = run() {
+                let _ = fail.send(Err(e));
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv().map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// Andere Systeme: kein direkter PDF-Weg, die Oberfläche fällt auf den Druckdialog zurück.
+#[cfg(not(any(windows, target_os = "linux")))]
 #[tauri::command]
 async fn export_pdf(path: String, width: f64, height: f64) -> Result<(), String> {
     let _ = (path, width, height);

@@ -1858,22 +1858,17 @@ async function fitImportedTexts() {
 }
 
 // ---------- PDF ----------
-// Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Unter Windows
-// schreibt WebView2 das PDF direkt (randlos, Seitengröße der Präsentation), sonst der Druckdialog.
+// Jeder Pfadschritt wird eine Seite: eine Kopie der Leinwand mit der Kamera dieses Schritts. Das PDF schreibt
+// die WebView direkt (WebView2 unter Windows, WebKitGTK unter Linux): randlos, Seitengröße der Präsentation.
 // Texte und Formen bleiben Vektoren, die eingebetteten Schriften stimmen.
 const PRINT_W = 1280;
 
 async function printDeck() {
   if (isEditing()) document.activeElement.blur();
   const base = (currentPath?.split(/[\\/]/).pop() ?? `${doc.title}.weitblick`).replace(/\.weitblick$/i, "");
-  // Windows: direkt als PDF in Seitengröße der Präsentation; sonst (Linux) über den Druckdialog.
-  const direct = navigator.userAgent.includes("Windows");
-  let target = null;
-  if (direct) {
-    target = await tauri.dialog.save({ filters: [{ name: "PDF", extensions: ["pdf"] }], defaultPath: `${base}.pdf` });
-    if (!target) return;
-    if (!target.toLowerCase().endsWith(".pdf")) target += ".pdf";
-  }
+  let target = await tauri.dialog.save({ filters: [{ name: "PDF", extensions: ["pdf"] }], defaultPath: `${base}.pdf` });
+  if (!target) return;
+  if (!target.toLowerCase().endsWith(".pdf")) target += ".pdf";
   const aspect = aspectRatio();
   const H = Math.round(PRINT_W / aspect);
   const deck = document.createElement("div");
@@ -1916,20 +1911,21 @@ async function printDeck() {
   };
   // Bilder und Schriften der Kopien sind schon geladen; kurz warten, bis sie gezeichnet sind.
   await new Promise((r) => setTimeout(r, 300));
-  if (!direct) {
-    addEventListener("afterprint", done);
-    print();
-    return;
-  }
   try {
     document.body.classList.add("busy");
     await tauri.core.invoke("export_pdf", { path: target, width: PRINT_W / 96, height: H / 96 });
     await tauri.dialog.message(`${doc.path.length} Seiten als PDF gespeichert.`, { title: "PDF-Export", kind: "info" });
   } catch (err) {
+    // Ohne direkten Weg (weder WebView2 noch WebKitGTK): Druckdialog.
+    if (String(err) === "unsupported") {
+      document.body.classList.remove("busy");
+      addEventListener("afterprint", done);
+      print();
+      return;
+    }
     await tauri.dialog.message(String(err?.message ?? err), { title: "PDF-Export fehlgeschlagen", kind: "error" });
-  } finally {
-    done();
   }
+  done();
 }
 
 function showExportMenu() {

@@ -34,6 +34,11 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 webview2-com = "0.39"
 windows-core = "0.62"
 
+# Direkter PDF-Export über WebKitGTK (ebenfalls die Versionen, die Tauri/wry mitbringen)
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
