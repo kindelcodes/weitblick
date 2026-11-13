@@ -311,13 +311,38 @@ function unrotate(dx, dy) {
   return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
 }
 
+// WebKitGTK (Linux) rastert eine per transform skalierte Ebene in 1× und vergrößert nur das Bild – nah
+// herangezoomte Bereiche werden unscharf. Steht die Kamera still, skaliert deshalb CSS-zoom statt scale():
+// das zwingt WebKit, in echter Größe neu zu zeichnen. Unter Windows (WebView2) ist scale() scharf.
+const SHARPEN = !navigator.userAgent.includes("Windows");
+let sharpenTimer = 0;
+
+// k: Faktor im transform; die Verschiebungen werden durch d geteilt, weil zoom sie mit vergrößert.
+function worldTransform(z, k, d) {
+  const vw = viewport.clientWidth / 2 / d;
+  const vh = viewport.clientHeight / 2 / d;
+  return camera.rot
+    ? `translate(${vw}px, ${vh}px) rotate(${-camera.rot}deg) scale(${k}) translate(${-camera.cx}px, ${-camera.cy}px)`
+    : `translate(${vw - (camera.cx * z) / d}px, ${vh - (camera.cy * z) / d}px) scale(${k})`;
+}
+
+function sharpen() {
+  const z = zoom();
+  if (z <= 1) return;
+  world.style.zoom = z;
+  world.style.transform = worldTransform(z, 1, z);
+}
+
 function render() {
   const z = zoom();
   const tx = viewport.clientWidth / 2 - camera.cx * z;
   const ty = viewport.clientHeight / 2 - camera.cy * z;
-  world.style.transform = camera.rot
-    ? `translate(${viewport.clientWidth / 2}px, ${viewport.clientHeight / 2}px) rotate(${-camera.rot}deg) scale(${z}) translate(${-camera.cx}px, ${-camera.cy}px)`
-    : `translate(${tx}px, ${ty}px) scale(${z})`;
+  world.style.zoom = "";
+  world.style.transform = worldTransform(z, z, 1);
+  if (SHARPEN || window.__sharpen) {
+    clearTimeout(sharpenTimer);
+    sharpenTimer = setTimeout(sharpen, 150);
+  }
   world.style.setProperty("--inv", 1 / z); // für Auswahlrand und Anfasser in Bildschirmgröße
   // Punktraster wandert mit, damit sich Bewegung auch auf leerer Fläche zeigt.
   const grid = 40 * z;
@@ -633,6 +658,7 @@ function showPathPreview(li, i) {
   });
   const copy = world.cloneNode(true);
   copy.removeAttribute("id");
+  copy.style.zoom = ""; // sharpen() kann zoom gesetzt haben; die Kopie skaliert per transform
   copy.querySelectorAll(".handle, .rot-handle").forEach((x) => x.remove());
   copy.querySelectorAll(".selected").forEach((x) => x.classList.remove("selected"));
   // Wie beim Präsentieren: Rahmen ohne Rand, eingeblendete Objekte erst ab ihrem Schritt.
@@ -1894,6 +1920,7 @@ async function printDeck() {
     page.append(bg);
     const w = world.cloneNode(true);
     w.removeAttribute("id");
+    w.style.zoom = "";
     const z = PRINT_W / cam.w;
     w.style.transform = `translate(${PRINT_W / 2}px, ${H / 2}px) rotate(${-(cam.rot ?? 0)}deg) scale(${z}) translate(${-cam.cx}px, ${-cam.cy}px)`;
     w.style.setProperty("--inv", 1 / z);
