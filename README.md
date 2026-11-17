@@ -40,7 +40,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Vorlagen | Startseite: 8 Vorlagen (Vortrag, Training & Sport, Wissenschaft, Zeitstrahl, Mindmap, Workshop, Projektbericht, Idee & Pitch) mit Stil, Rahmen, Pfad und Platzhaltertexten; „Export ▾“ → „Als Vorlage speichern“ macht die aktuelle Präsentation zur eigenen Vorlage |
 | Raster | Knopf # unten oder Strg+#: Objekte rasten am Raster ein, das Raster wird als Linien angezeigt |
 | Rechtsklick | auf ein Objekt: Kopieren, Anordnen, Rahmen, Pfad, Animation, Löschen; auf die freie Leinwand: Einfügen, Text/Rahmen/Form hier, Alles auswählen, Stil |
-| Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe, der orange Anfasser am gestrichelten Kasten skaliert sie gemeinsam |
+| Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe, der orange Anfasser am gestrichelten Kasten skaliert sie gemeinsam; ein zweiter Klick wählt nur das angeklickte Objekt darin (z. B. um einen Text in der Größe zu ändern) |
 | Planet mit Monden | Einfügen → Diagramme: Kugel, Umlaufbahn und vier Monde als *ein* gruppierter Block |
 | Ebenen | Formatleiste ⤒ ↑ ↓ ⤓ oder Strg+↑/↓ (eine Ebene), Strg+Umschalt+↑/↓ (ganz nach vorn/hinten) |
 | Zum Rahmen hinzufügen / lösen | Rahmen und Objekte gemeinsam auswählen → „▣+ Rahmen“ (der Rahmen wächst mit); Objekt auswählen → „▣− Rahmen“. Beim gewählten Rahmen ist sein Inhalt gestrichelt markiert |

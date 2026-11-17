@@ -1611,10 +1611,12 @@ viewport.addEventListener("pointerdown", (e) => {
       return;
     }
     if (o) {
+      // Ist die Gruppe schon ausgewählt, wählt ein weiterer Klick (ohne Ziehen) nur das Objekt darin.
+      const drill = o.group && selectedGroup() && selection.includes(o) ? o : null;
       if (!selection.includes(o)) select(o);
       // Alle ausgewählten Objekte bewegen sich gemeinsam, Rahmen mit ihrem Inhalt.
       const items = withContents(selection).map((p) => ({ p, x: p.x, y: p.y }));
-      gesture = { kind: "move", start, items, before: snapshot() };
+      gesture = { kind: "move", start, items, before: snapshot(), drill };
     } else if (e.button === 0 && e.shiftKey) {
       // Umschalt+Ziehen auf leerer Fläche: Auswahlrechteck.
       const box = document.createElement("div");
@@ -1857,7 +1859,9 @@ const endGesture = (e) => {
   gesture = null;
   viewport.classList.remove("dragging");
   clearGuides();
-  if (g?.before && snapshot() !== g.before) checkpoint(g.before);
+  const moved = g?.before && snapshot() !== g.before;
+  if (moved) checkpoint(g.before);
+  else if (g?.drill) setSelection([g.drill]);
   updateGeomFields();
   if (g?.kind === "marquee") {
     g.box.remove();
