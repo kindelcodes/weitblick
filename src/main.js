@@ -5,6 +5,7 @@ import { DIAGRAMS } from "./diagrams.js";
 import { THEMES, ROLES } from "./themes.js";
 import { buildPptx, importPptx } from "./pptx.js";
 import { importPrezi } from "./prezi.js";
+import { TEMPLATES } from "./templates.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
@@ -2168,6 +2169,7 @@ function showExportMenu() {
   buildMenu(
     [
       { label: "PDF …", run: printDeck },
+      { label: "Als Vorlage speichern", run: saveAsTemplate },
       { label: "PowerPoint mit Morph-Übergängen …", run: () => exportPptx(true) },
       { label: "PowerPoint klassisch …", run: () => exportPptx(false) },
       "-",
@@ -3620,7 +3622,92 @@ async function showStart() {
     grid.append(card);
   });
   document.getElementById("start-empty").hidden = recent.length > 0;
+  await showTemplates();
   startEl.hidden = false;
+}
+
+// ---------- Vorlagen ----------
+// Eingebaute Vorlagen (templates.js) und eigene: „Export ▾“ → „Als Vorlage speichern“ legt die aktuelle
+// Präsentation in den Vorlagen-Ordner der App. Eine Vorlage öffnet sich als neue, ungespeicherte Präsentation.
+
+function templateCard(name, note, colors, onOpen, onRemove) {
+  const card = document.createElement("div");
+  card.className = "recent-card template-card";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.title = note;
+  card.innerHTML = `<div class="tpl-swatch"><span></span><span></span></div><div class="meta"><span class="name"></span><span class="where"></span></div>`;
+  const [bg, a, b] = colors;
+  const sw = card.querySelector(".tpl-swatch");
+  sw.style.background = bg;
+  sw.children[0].style.background = a;
+  sw.children[1].style.background = b;
+  card.querySelector(".name").textContent = name;
+  card.querySelector(".where").textContent = note;
+  card.addEventListener("click", onOpen);
+  card.addEventListener("keydown", (e) => e.key === "Enter" && e.target === card && onOpen());
+  if (onRemove) {
+    const x = Object.assign(document.createElement("button"), { className: "remove", title: "Vorlage löschen", textContent: "×" });
+    x.setAttribute("aria-label", "Vorlage löschen");
+    x.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onRemove();
+    });
+    card.append(x);
+  }
+  return card;
+}
+
+async function showTemplates() {
+  const grid = document.getElementById("template-grid");
+  grid.replaceChildren();
+  for (const t of TEMPLATES) {
+    const th = THEMES.find((x) => x.id === t.theme);
+    grid.append(templateCard(t.name, t.note, [th.background, th.accent, th.accent2], () => startFromTemplate(t.doc(), null)));
+  }
+  const own = await tauri?.core.invoke("list_templates").catch(() => []);
+  for (const path of own ?? []) {
+    const name = path.split(/[\\/]/).pop().replace(/\.weitblick$/i, "");
+    grid.append(
+      templateCard(name, "Eigene Vorlage", ["#3c7a73", "#f28c38", "#fffaf4"], () => startFromTemplate(null, path), async () => {
+        if (!(await tauri.dialog.ask(`Vorlage „${name}“ löschen?`, { title: "Vorlage löschen", kind: "warning" }))) return;
+        await tauri.core.invoke("delete_template", { path }).catch(() => {});
+        showTemplates();
+      }),
+    );
+  }
+}
+
+async function startFromTemplate(built, path) {
+  if (!(await confirmDiscard())) return;
+  hideStart();
+  if (presenting) await stopPresentation();
+  try {
+    if (path) {
+      const result = await tauri.core.invoke("open_presentation", { path });
+      loadDocument(JSON.parse(result.json), null, result.media);
+    } else {
+      loadDocument(built, null);
+      // Schriften des Stils nachladen; ohne Internet bleibt die Ersatzschrift.
+      for (const f of new Set(Object.values(doc.theme.fonts))) await embedGoogleFont(f, styleStatus);
+      buildWorld();
+    }
+    markSaved(); // eine frische Vorlage ist noch keine ungesicherte Änderung
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Vorlage", kind: "error" });
+  }
+}
+
+async function saveAsTemplate() {
+  if (isEditing()) document.activeElement.blur();
+  try {
+    const dir = await tauri.core.invoke("template_dir");
+    const name = (doc.title || "Vorlage").replace(/[\\/:*?"<>|]/g, "_").trim() || "Vorlage";
+    await tauri.core.invoke("save_presentation", { path: `${dir}/${name}.weitblick`, json: JSON.stringify({ ...doc, version: FORMAT_VERSION }), media: usedMedia() });
+    await tauri.dialog.message(`„${name}“ steht jetzt unter „Start“ bei den Vorlagen.`, { title: "Als Vorlage gespeichert", kind: "info" });
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Vorlage speichern fehlgeschlagen", kind: "error" });
+  }
 }
 
 function hideStart() {

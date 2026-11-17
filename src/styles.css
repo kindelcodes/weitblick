@@ -1602,3 +1602,30 @@ body.presenting .obj.video video {
   border-color: var(--orange);
   color: #fff;
 }
+
+/* Vorlagen auf der Startseite: Farbfläche des Stils mit zwei Akzentkreisen */
+.tpl-swatch {
+  aspect-ratio: 16 / 9;
+  position: relative;
+  overflow: hidden;
+}
+
+.tpl-swatch span {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.tpl-swatch span:first-child {
+  width: 46%;
+  aspect-ratio: 1;
+  left: 27%;
+  top: 12%;
+}
+
+.tpl-swatch span:last-child {
+  width: 18%;
+  aspect-ratio: 1;
+  right: 10%;
+  bottom: 10%;
+  opacity: 0.8;
+}

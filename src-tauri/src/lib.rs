@@ -499,6 +499,41 @@ async fn export_pdf(path: String, width: f64, height: f64) -> Result<(), String>
     Err("unsupported".into())
 }
 
+// Eigene Vorlagen: .weitblick-Dateien im Ordner „vorlagen“ der App-Daten.
+fn templates_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app_json_file(app, "vorlagen")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+fn template_dir(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(templates_path(&app)?.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn list_templates(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let mut files: Vec<String> = std::fs::read_dir(templates_path(&app)?)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("weitblick")))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+// Löscht nur Dateien direkt im Vorlagen-Ordner, nichts anderes.
+#[tauri::command]
+fn delete_template(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let dir = templates_path(&app)?.canonicalize().map_err(|e| e.to_string())?;
+    let file = std::path::Path::new(&path).canonicalize().map_err(|e| e.to_string())?;
+    if file.parent() != Some(dir.as_path()) {
+        return Err("Keine Vorlage".into());
+    }
+    std::fs::remove_file(file).map_err(|e| e.to_string())
+}
+
 // Wurde die App per Doppelklick auf eine .weitblick-Datei gestartet, steht deren Pfad in den Argumenten.
 #[tauri::command]
 fn startup_file() -> Option<String> {
@@ -532,6 +567,9 @@ pub fn run() {
             open_file,
             write_temp,
             export_pdf,
+            template_dir,
+            list_templates,
+            delete_template,
             write_zip,
             read_zip
         ])

@@ -34,7 +34,10 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Bild aus der Zwischenablage | Strg+V (z. B. nach einem Bildschirmfoto) |
 | Drehen | runder Anfasser über dem Objekt, Umschalt rastet in 15°-Schritten ein |
 | Breite der Seitenleisten | an der Kante ziehen (orange Linie), Doppelklick setzt zurück; wird gemerkt |
-| Hilfslinien | beim Verschieben rasten Kanten und Mitten an anderen Objekten ein (orange Linie); Alt beim Ziehen: frei |
+| Hilfslinien | beim Verschieben rasten Kanten und Mitten an anderen Objekten ein (orange Linie), in einer Reihe auch auf gleiche Abstände (grüne Abstandsmarken); beim Größe-Ändern rasten Kanten und gleiche Breite/Höhe ein; Alt beim Ziehen: frei |
+| Maße genau eingeben | Formatleiste „⇲ Maße“: Breite, Höhe, X, Y, Drehung, 🔗 hält das Seitenverhältnis; bei mehreren Objekten gelten Breite, Höhe und Drehung für jedes |
+| Ausrichten, verteilen, angleichen | mehrere Objekte auswählen → „⊞ Ausrichten“ oder Rechtsklick: links/mittig/rechts, oben/mittig/unten, gleichmäßig verteilen, gleiche Breite/Höhe/Größe wie das zuerst gewählte Objekt |
+| Vorlagen | Startseite: 8 Vorlagen (Vortrag, Training & Sport, Wissenschaft, Zeitstrahl, Mindmap, Workshop, Projektbericht, Idee & Pitch) mit Stil, Rahmen, Pfad und Platzhaltertexten; „Export ▾“ → „Als Vorlage speichern“ macht die aktuelle Präsentation zur eigenen Vorlage |
 | Raster | Knopf # unten oder Strg+#: Objekte rasten am Raster ein, das Raster wird als Linien angezeigt |
 | Rechtsklick | auf ein Objekt: Kopieren, Anordnen, Rahmen, Pfad, Animation, Löschen; auf die freie Leinwand: Einfügen, Text/Rahmen/Form hier, Alles auswählen, Stil |
 | Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe, der orange Anfasser am gestrichelten Kasten skaliert sie gemeinsam |
