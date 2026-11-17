@@ -11,6 +11,12 @@
       header .title { font-size: 22px; font-weight: 600; flex: 1; }
       .time { font-variant-numeric: tabular-nums; font-size: 28px; }
       .clock { font-variant-numeric: tabular-nums; opacity: 0.7; }
+      main { display: grid; grid-template-columns: 1fr minmax(280px, 42%); min-height: 0; }
+      .previews { display: flex; flex-direction: column; gap: 14px; padding: 20px 24px 20px 0; min-height: 0; }
+      .previews img { width: 100%; border-radius: 8px; background: #000; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+      .previews img:not([src]) { visibility: hidden; }
+      .previews .label { font-size: 13px; opacity: 0.6; margin-bottom: -8px; }
+      #thumb-next { width: 62%; opacity: 0.85; }
       #notes { padding: 24px 32px; font-size: 26px; line-height: 1.45; white-space: pre-wrap; overflow-y: auto; }
       #notes.empty { opacity: 0.4; font-style: italic; }
       footer .next { flex: 1; opacity: 0.8; }
@@ -25,7 +31,15 @@
       <span class="clock" id="clock"></span>
       <span class="time" id="time" title="Seit Beginn (Klick setzt zurück)">0:00</span>
     </header>
-    <div id="notes"></div>
+    <main>
+      <div id="notes"></div>
+      <div class="previews">
+        <span class="label">Jetzt</span>
+        <img id="thumb-cur" alt="Aktueller Schritt" />
+        <span class="label">Als Nächstes</span>
+        <img id="thumb-next" alt="Nächster Schritt" />
+      </div>
+    </main>
     <footer>
       <span class="next" id="next"></span>
       <button data-cmd="prev">◀ Zurück</button>
@@ -50,6 +64,9 @@
         $("notes").textContent = p.notes || "Keine Notizen zu diesem Schritt.";
         $("notes").classList.toggle("empty", !p.notes);
         $("next").textContent = p.next ? `Als Nächstes: ${p.next}` : "Letzter Schritt";
+      });
+      listen("presenter-thumbs", ({ payload: p }) => {
+        for (const [id, src] of [["thumb-cur", p.cur], ["thumb-next", p.next]]) src ? uid=197610(Nils Kindel) gid=197121 groups=197121.setAttribute("src", src) : uid=197610(Nils Kindel) gid=197121 groups=197121.removeAttribute("src");
       });
       const send = (cmd) => emit("presenter-cmd", cmd);
       for (const b of document.querySelectorAll("button")) b.addEventListener("click", () => send(b.dataset.cmd));

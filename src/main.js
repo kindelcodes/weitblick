@@ -715,9 +715,27 @@ function sendPresenter() {
       next: stepName(pathIndex + 1),
     })
     .catch(() => {});
+  sendPresenterThumbs(pathIndex);
+}
+
+// Vorschaubilder des aktuellen und nächsten Schritts; während des Präsentierens ändert sich nichts, also zwischenspeichern.
+const thumbCache = new Map();
+async function stepThumb(i) {
+  if (!thumbCache.has(i)) {
+    const w = 640;
+    thumbCache.set(i, thumbnail(i, w, Math.round(w / aspectRatio())).catch(() => null));
+  }
+  return thumbCache.get(i);
+}
+
+async function sendPresenterThumbs(i) {
+  const [cur, next] = await Promise.all([stepThumb(i), stepThumb(i + 1)]);
+  if (!presenterOpen || i !== pathIndex) return; // inzwischen weitergeblättert
+  tauri.event.emitTo("presenter", "presenter-thumbs", { cur, next }).catch(() => {});
 }
 
 async function openPresenter(monitor) {
+  thumbCache.clear();
   const s = monitor.scaleFactor || 1;
   try {
     new tauri.webviewWindow.WebviewWindow("presenter", {
@@ -904,7 +922,7 @@ function setSelection(list) {
 }
 
 function selectAll() {
-  setSelection(doc.objects.filter((o) => !o.hidden));
+  setSelection(doc.objects.filter((o) => !o.hidden && !o.locked));
 }
 
 // Was gehört zu einem Rahmen? Ein Objekt mit Eintrag „frame“ gehört fest zu diesem Rahmen
@@ -1006,6 +1024,109 @@ function arrange(op) {
   }
   updateGroupBox();
   updateToolbar();
+}
+
+// Mehrere Tastendrücke kurz hintereinander sind ein Rückgängig-Schritt.
+let nudgeAt = 0;
+function nudge([dx, dy], px) {
+  if (Date.now() - nudgeAt > 700) checkpoint();
+  nudgeAt = Date.now();
+  const d = px / zoom();
+  for (const u of arrangeUnits()) moveUnit(u, dx * d, dy * d);
+  updateGroupBox();
+  positionContextBar();
+  updateGeomFields();
+}
+
+// ---------- Format übertragen (Pinsel) ----------
+// Gleicher Typ: alle Formatangaben; anderer Typ: nur die Farbe. Der Pinsel wirkt auf den nächsten Klick.
+const FORMAT_KEYS = ["color", "fill", "stroke", "fillOpacity", "fade", "radius", "font", "size", "weight", "italic", "align", "lh", "bg", "bgPad", "role"];
+let formatClip = null;
+let painting = false;
+
+function copyFormat() {
+  if (!selected) return;
+  formatClip = { type: selected.type, keys: Object.fromEntries(FORMAT_KEYS.filter((k) => k in selected).map((k) => [k, structuredClone(selected[k])])) };
+}
+
+function pasteFormat(list = selection) {
+  if (!formatClip || !list.length) return;
+  checkpoint();
+  for (const o of list) {
+    if (o.type === formatClip.type) {
+      for (const k of FORMAT_KEYS) {
+        if (k in formatClip.keys) o[k] = structuredClone(formatClip.keys[k]);
+        else delete o[k];
+      }
+    } else {
+      const c = formatClip.keys.color ?? formatClip.keys.fill;
+      if (c && colorKey(o)) o[colorKey(o)] = c;
+    }
+    updateEl(o);
+  }
+  updateToolbar();
+}
+
+function setPainting(on) {
+  painting = on;
+  document.body.classList.toggle("painting", on);
+  document.getElementById("btn-format").classList.toggle("on", on);
+}
+
+document.getElementById("btn-format").addEventListener("click", () => {
+  if (painting) return setPainting(false);
+  copyFormat();
+  setPainting(!!formatClip);
+});
+
+// ---------- Bild ersetzen ----------
+// Lage, Breite und Zuschnitt bleiben; ohne Zuschnitt passt sich die Höhe dem neuen Bild an (Mitte bleibt).
+async function replaceImage(o) {
+  const path = await tauri.dialog.open({ multiple: false, filters: [{ name: "Bilder", extensions: Object.keys(MIME).filter((x) => !isVideo(`x.${x}`)) }] });
+  if (!path) return;
+  try {
+    const file = await tauri.core.invoke("import_media", { path });
+    const src = `media/${newId("i")}.${extOf(file.name)}`;
+    addMedia(src, file.data);
+    const size = await imageSize(media.get(src).url);
+    checkpoint();
+    if (!o.crop) {
+      const mid = o.y + o.h / 2;
+      o.h = (o.w * size.h) / size.w;
+      o.y = mid - o.h / 2;
+    }
+    o.src = src;
+    delete o.link; // eine verknüpfte Grafik zeigt nun ein anderes Bild
+    delete o.source;
+    updateEl(o);
+    updateToolbar();
+  } catch (err) {
+    await tauri.dialog.message(String(err?.message ?? err), { title: "Bild ersetzen", kind: "error" });
+  }
+}
+
+// Fixierte Objekte lassen sich nicht anklicken, verschieben oder per Rechteck auswählen.
+function lockSelection() {
+  const items = selection.filter((o) => !o.hidden);
+  if (!items.length) return;
+  checkpoint();
+  for (const o of items) o.locked = true;
+  select(null);
+}
+
+function unlock(list) {
+  if (!list.length) return;
+  checkpoint();
+  for (const o of list) delete o.locked;
+  setSelection(list);
+}
+
+function lockedAt(e) {
+  for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+    const o = byId.get(el.closest?.(".obj")?.dataset.id);
+    if (o?.locked) return o;
+  }
+  return null;
 }
 
 function arrangeMenuItems() {
@@ -1562,7 +1683,7 @@ function hitObject(e) {
     const objEl = el.closest?.(".obj");
     if (!objEl || objEl.classList.contains("hidden-frame") || !world.contains(objEl)) continue;
     const o = byId.get(objEl.dataset.id);
-    if (!o) continue;
+    if (!o || o.locked) continue;
     if (o.type !== "frame") return o;
     const nearEdge = p.x - o.x < band || o.x + o.w - p.x < band || p.y - o.y < band || o.y + o.h - p.y < band;
     if (nearEdge) return o;
@@ -1617,6 +1738,12 @@ viewport.addEventListener("pointerdown", (e) => {
     gesture = { kind: "rotate", o, center: { x: o.x + o.w / 2, y: o.y + o.h / 2 }, before: snapshot() };
   } else {
     const o = e.button === 0 ? hitObject(e) : null;
+    if (o && painting) {
+      pasteFormat(groupOf(o));
+      setPainting(false);
+      select(o);
+      return;
+    }
     if (o && (e.shiftKey || e.ctrlKey)) {
       select(o, true); // Umschalt- oder Strg+Klick: zur Auswahl hinzufügen oder entfernen
       return;
@@ -1888,7 +2015,7 @@ const endGesture = (e) => {
         w: Math.abs(g.end.x - g.start.x),
         h: Math.abs(g.end.y - g.start.y),
       };
-      const hits = doc.objects.filter((o) => !o.hidden && inside(o, box));
+      const hits = doc.objects.filter((o) => !o.hidden && !o.locked && inside(o, box));
       setSelection([...selection, ...hits.filter((o) => !selection.includes(o))]);
     }
   }
@@ -2043,7 +2170,7 @@ async function exportPptx(morph) {
   const path = await tauri.dialog.save({ filters: [{ name: "PowerPoint-Präsentation", extensions: ["pptx"] }], defaultPath: `${base}.pptx` });
   if (!path) return;
   const target = path.toLowerCase().endsWith(".pptx") ? path : `${path}.pptx`;
-  const steps = doc.path.map((_, i) => ({ rect: stepRect(i), hidden: hiddenAt(i) })).filter((s) => s.rect);
+  const steps = doc.path.map((_, i) => ({ rect: stepRect(i), hidden: hiddenAt(i), notes: noteHolder(i)?.notes ?? "" })).filter((s) => s.rect);
   try {
     document.body.classList.add("busy");
     const entries = await buildPptx({
@@ -2875,6 +3002,66 @@ const progressBar = document.getElementById("progress-bar");
 const stepCounter = document.getElementById("step-label");
 let controlsTimer = null;
 
+// ---------- Suchen (Strg+F) ----------
+// Findet Texte (und Rahmentitel); Enter springt zum nächsten Treffer, Umschalt+Enter zum vorigen.
+let searchBox = null;
+let searchHits = [];
+let searchAt = -1;
+
+function openSearch() {
+  if (presenting) return;
+  if (!searchBox) {
+    searchBox = document.createElement("div");
+    searchBox.className = "search-box";
+    searchBox.innerHTML = `<input type="search" placeholder="Text suchen …" aria-label="Text suchen" /><span class="search-count"></span><button title="Schließen (Esc)" aria-label="Suche schließen">×</button>`;
+    viewport.append(searchBox);
+    const input = searchBox.querySelector("input");
+    for (const ev of ["pointerdown", "wheel", "dblclick", "contextmenu"]) searchBox.addEventListener(ev, (e) => e.stopPropagation());
+    input.addEventListener("input", () => runSearch(input.value));
+    input.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey && e.key.toLowerCase() === "s")) e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        showHit(e.shiftKey ? -1 : 1);
+      }
+      if (e.key === "Escape") closeSearch();
+    });
+    searchBox.querySelector("button").addEventListener("click", closeSearch);
+  }
+  searchBox.hidden = false;
+  const input = searchBox.querySelector("input");
+  input.focus();
+  input.select();
+  runSearch(input.value);
+}
+
+function closeSearch() {
+  if (searchBox) searchBox.hidden = true;
+}
+
+function runSearch(q) {
+  const needle = q.trim().toLowerCase();
+  searchHits = needle
+    ? doc.objects.filter((o) => (o.type === "text" && o.text?.toLowerCase().includes(needle)) || (o.type === "frame" && !o.hidden && o.title?.toLowerCase().includes(needle)))
+    : [];
+  searchAt = -1;
+  searchBox.querySelector(".search-count").textContent = needle ? (searchHits.length ? `${searchHits.length} Treffer` : "kein Treffer") : "";
+}
+
+function showHit(dir) {
+  if (!searchHits.length) return;
+  searchAt = (searchAt + dir + searchHits.length) % searchHits.length;
+  const o = searchHits[searchAt];
+  searchBox.querySelector(".search-count").textContent = `${searchAt + 1} / ${searchHits.length}`;
+  select(o);
+  // Texte im kleinsten sichtbaren Rahmen zeigen, der sie enthält; sonst den Text mit Rand.
+  const frame = o.type === "text" ? doc.objects.filter((f) => f.type === "frame" && !f.hidden && inside(o, f)).sort((a, b) => a.w * a.h - b.w * b.h)[0] : null;
+  if (frame) {
+    offPath = true;
+    camera.flyTo({ ...fitRect(frame, viewport.clientWidth, viewport.clientHeight, 0.08), rot: frame.rot ?? 0 });
+  } else flyToObject(o);
+}
+
 function flyToObject(o) {
   if (!o) return;
   const i = o.type === "frame" ? doc.path.indexOf(o.id) : -1;
@@ -3101,6 +3288,10 @@ function objectMenu(at) {
       ],
     },
     arrangeUnits().length > 1 && { label: "Ausrichten und angleichen", sub: arrangeMenuItems() },
+    { label: "Fixieren (nicht mehr verschiebbar)", run: lockSelection },
+    { label: "Format kopieren", keys: "Strg+Umschalt+C", run: copyFormat },
+    formatClip && { label: "Format einfügen", keys: "Strg+Umschalt+V", run: () => pasteFormat() },
+    one?.type === "image" && { label: "Bild ersetzen …", run: () => replaceImage(one) },
     selection.length > 1 && { label: "Gruppieren", keys: "Strg+G", run: groupSelection },
     selection.some((o) => o.group) && { label: "Gruppierung aufheben", keys: "Strg+Umschalt+G", run: ungroupSelection },
     frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
@@ -3120,8 +3311,12 @@ function objectMenu(at) {
   ].filter(Boolean);
 }
 
-function canvasMenu(at) {
+function canvasMenu(at, lockedHit) {
+  const locked = doc.objects.filter((o) => o.locked);
   return [
+    lockedHit && { label: "Fixierung hier lösen", run: () => unlock(lockedHit.group ? groupOf(lockedHit) : [lockedHit]) },
+    locked.length > 0 && { label: `Alle Fixierungen lösen (${locked.length})`, run: () => unlock(locked) },
+    "-",
     clipboard && { label: "Hier einfügen", keys: "Strg+V", run: () => pasteObjects(clipboard, at) },
     "-",
     { label: "Text hier", run: () => addObject("text", at) },
@@ -3158,7 +3353,7 @@ viewport.addEventListener("contextmenu", (e) => {
   const hit = hitObject(e);
   if (hit && !selection.includes(hit)) select(hit);
   if (!hit) select(null);
-  buildMenu(hit ? objectMenu(at) : canvasMenu(at), ctxMenu);
+  buildMenu(hit ? objectMenu(at) : canvasMenu(at, lockedAt(e)), ctxMenu);
   ctxMenu.classList.add("open");
   // Im Fenster halten.
   const w = ctxMenu.offsetWidth;
@@ -3192,6 +3387,11 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (e.shiftKey) saveAs();
     else save();
+    return;
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    openSearch();
     return;
   }
   if (e.ctrlKey && (e.key === "n" || e.key === "N")) {
@@ -3235,6 +3435,17 @@ document.addEventListener("keydown", (e) => {
     else groupSelection();
     return;
   }
+  if (e.key === "Escape" && painting) {
+    setPainting(false);
+    return;
+  }
+  // Format kopieren/einfügen wie in PowerPoint; preventDefault verhindert das normale Einfügen.
+  if (e.ctrlKey && e.shiftKey && !presenting && ["c", "v"].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    if (e.key.toLowerCase() === "c") copyFormat();
+    else pasteFormat();
+    return;
+  }
   if (e.ctrlKey && !presenting && ["c", "x", "d", "a"].includes(e.key.toLowerCase())) {
     e.preventDefault();
     ({ c: copySelection, x: cutSelection, d: duplicateSelection, a: selectAll })[e.key.toLowerCase()]();
@@ -3244,6 +3455,13 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (e.key.toLowerCase() === "y" || e.shiftKey) redo();
     else undo();
+    return;
+  }
+  // Pfeiltasten verschieben die Auswahl (1 px, mit Umschalt 10 px auf dem Bildschirm); ohne Auswahl blättern sie im Pfad.
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (dir && !presenting && selection.length && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    nudge(dir, e.shiftKey ? 10 : 1);
     return;
   }
   if (e.key === "F5") startPresentation(e.shiftKey);
@@ -3539,10 +3757,20 @@ function loadImage(url) {
 }
 
 // Vorschaubild des Überblicks auf einer Leinwand zeichnen: Hintergrund, Formen, Bilder und Texte (vereinfacht).
-async function thumbnail() {
-  const W = 320;
-  const H = 180;
-  const ov = byId.get(doc.path[0]);
+// Ohne step: Überblick fürs Startbild. Mit step: Ausschnitt dieses Pfadschritts wie beim Präsentieren
+// (eingeblendete Objekte, Kapiteldeckel) – für die Referentenansicht.
+async function thumbnail(step = null, W = 320, H = 180) {
+  let ov = byId.get(doc.path[0]);
+  let cam = null;
+  let hidden = new Set();
+  const aspect = aspectRatio();
+  if (step !== null) {
+    if (doc.path[step] === undefined) return null;
+    cam = stepCamera(step);
+    const ch = cam.w / aspect;
+    ov = { x: cam.cx - cam.w / 2, y: cam.cy - ch / 2, w: cam.w, h: ch };
+    hidden = hiddenAt(step);
+  }
   if (!ov) return null;
   const canvas = Object.assign(document.createElement("canvas"), { width: W, height: H });
   const ctx = canvas.getContext("2d");
@@ -3560,7 +3788,8 @@ async function thumbnail() {
   const ox = (W - ov.w * k) / 2 - ov.x * k;
   const oy = (H - ov.h * k) / 2 - ov.y * k;
   for (const o of doc.objects) {
-    if (o.hidden || o.type === "frame" || o.inside) continue;
+    if (o.hidden || o.type === "frame" || hidden.has(o.id)) continue;
+    if (cam ? (o.cover || o.inside) && zoomFade(o, cam, aspect) < 0.5 : o.inside) continue;
     const w = o.w * k;
     const h = o.h * k;
     if (w < 0.5 && h < 0.5) continue;

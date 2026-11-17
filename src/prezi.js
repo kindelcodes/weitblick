@@ -595,7 +595,8 @@ export async function importPrezi(entries, title, baseTheme) {
       },
       ...(background ? { background } : {}),
       fonts,
-      objects: [overview, ...objects],
+      // Rahmen ganz nach hinten: sonst liegen sie über ihrem Inhalt und fangen Klicks auf Texte und Anfasser ab.
+      objects: [overview, ...objects.filter((o) => o.type === "frame"), ...objects.filter((o) => o.type !== "frame")],
       path: cleanPath,
     },
     media,

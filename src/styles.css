@@ -1699,3 +1699,54 @@ body.presenting .toast {
   left: calc(6px * var(--inv, 1));
   transform: translateY(-50%);
 }
+
+/* Format-Pinsel aktiv: Zeiger zeigt, dass der nächste Klick das Format überträgt */
+body.painting .viewport,
+body.painting .obj {
+  cursor: copy !important;
+}
+
+/* Suche (Strg+F) oben rechts über der Leinwand */
+.search-box {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel);
+  color: var(--panel-text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+}
+
+.search-box[hidden] {
+  display: none;
+}
+
+.search-box input {
+  width: 220px;
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--panel-text);
+}
+
+.search-count {
+  color: var(--muted);
+  min-width: 70px;
+}
+
+.search-box button {
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: var(--muted);
+  cursor: pointer;
+}

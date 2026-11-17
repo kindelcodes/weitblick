@@ -25,7 +25,11 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 |---|---|
 | Zoomen | Mausrad (zur Mausposition hin) |
 | Verschieben | auf leerer Fläche ziehen |
-| Weiter / zurück im Pfad | Pfeiltasten, Leertaste, Bild ↑/↓ |
+| Weiter / zurück im Pfad | Pfeiltasten (wenn nichts ausgewählt ist), Leertaste, Bild ↑/↓ |
+| Objekt mit der Tastatur verschieben | Pfeiltasten: 1 px, mit Umschalt 10 px (Bildschirm-Pixel) |
+| Fixieren | Rechtsklick → „Fixieren“: lässt sich nicht mehr anklicken oder verschieben (z. B. Hintergrundbilder); Rechtsklick auf die Stelle → „Fixierung hier lösen“ oder „Alle Fixierungen lösen“ |
+| Format übertragen | Pinsel 🖌 in der Formatleiste, dann das Ziel anklicken (Esc bricht ab); oder Strg+Umschalt+C / Strg+Umschalt+V; gleicher Objekttyp: alle Formate, sonst die Farbe |
+| Suchen | Strg+F: Texte und Rahmentitel finden, Enter springt zum nächsten Treffer (Umschalt+Enter zurück) |
 | Überblick | Pos1 |
 | Zu einem Rahmen fliegen | Doppelklick in den Rahmen |
 | Objekt auswählen / bewegen | anklicken und ziehen (Rahmen an ihrer Kante) |
@@ -63,6 +67,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | PDF | „Export ▾“ → „PDF …“: eine Seite pro Pfadschritt, randlos im Seitenformat der Präsentation (unter Linux über den Druckdialog) |
 | Aufzählung | Knopf •≡ in der Formatleiste; beim Bearbeiten beginnt Enter einen neuen Punkt, Tab rückt eine Ebene ein |
 | Bild zuschneiden | Rechtsklick auf ein Bild → „Zuschneiden …“: Ausschnitt verschieben oder an den Ecken ziehen |
+| Bild ersetzen | Rechtsklick auf ein Bild → „Bild ersetzen …“: Lage, Breite und Zuschnitt bleiben |
 | PowerPoint mit eingebetteten Objekten | Origin-Graphen und andere OLE-Objekte kommen mit ihrem Vorschaubild an (EMF wird unter Windows in PNG umgewandelt) |
 | Graph aus Origin (verknüpfte Grafik) | Rechtsklick auf die freie Leinwand → „Verknüpfte Grafik einfügen …“: SVG/PNG wählen, optional die Originaldatei (.opju) dazu. Speichert Origin die Grafik neu, aktualisiert sie sich in Weitblick sofort; Rechtsklick → „Original bearbeiten“ öffnet das Projekt in Origin (oder die eingebettete Kopie, falls die Datei fehlt) |
 | Neue Präsentation | „Neu“ oder Strg+N |
@@ -75,8 +80,8 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Präsentieren von vorn / ab aktuellem Schritt | F5 / Umschalt+F5 |
 | Zweiter Bildschirm / Beamer | Mit mehreren Bildschirmen läuft die Präsentation auf dem anderen; im Menü ▾ neben „Präsentieren“ lässt sich der Bildschirm wählen |
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
-| Notizen | Feld „Notizen“ unter der Pfadliste: gilt für den aktuellen Pfadschritt und wandert beim Umsortieren mit |
-| Referentenansicht | Läuft die Präsentation auf dem anderen Bildschirm, öffnet sich auf deinem ein Fenster mit Notizen, nächstem Schritt, Uhr und Laufzeit (Klick setzt zurück); Pfeiltasten, Weiter/Zurück und Esc steuern von dort |
+| Notizen | Feld „Notizen“ unter der Pfadliste: gilt für den aktuellen Pfadschritt und wandert beim Umsortieren mit; kommen beim PowerPoint-Export als Sprechernotizen mit und beim Import zurück |
+| Referentenansicht | Läuft die Präsentation auf dem anderen Bildschirm, öffnet sich auf deinem ein Fenster mit Notizen, Vorschau des aktuellen und nächsten Schritts, nächstem Schritt, Uhr und Laufzeit (Klick setzt zurück); Pfeiltasten, Weiter/Zurück und Esc steuern von dort |
 | Präsentation beenden | Esc |
 
 ## Dateiformat `.weitblick`

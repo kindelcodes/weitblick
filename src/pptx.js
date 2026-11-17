@@ -293,21 +293,65 @@ export async function buildPptx(ctx) {
       morph && si > 0
         ? '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main" Requires="p159"><p:transition spd="slow"><p159:morph option="byObject"/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>'
         : "";
+    // Sprechernotizen: eigene Notizseite, auf die die Folie verweist.
+    const notes = steps[si].notes?.trim() ? steps[si].notes : null;
+    if (notes) rels.push(`<Relationship Id="rId${rels.length + 1}" Type="${REL}/notesSlide" Target="../notesSlides/notesSlide${si + 1}.xml"/>`);
     slides.push({
       xml: `${XML_HEAD}<p:sld ${NS_DECL}><p:cSld>${bgXml}<p:spTree>${EMPTY_GROUP}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transition}</p:sld>`,
       rels: `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join("")}</Relationships>`,
+      notes,
     });
   }
 
   slides.forEach((s, i) => {
     files.push({ name: `ppt/slides/slide${i + 1}.xml`, text: s.xml });
     files.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, text: s.rels });
+    if (s.notes) files.push(...notesSlideParts(s.notes, i + 1));
   });
-  files.push(...packageParts(doc, slides.length, slideH));
+  const notesAt = slides.flatMap((s, i) => (s.notes ? [i + 1] : []));
+  files.push(...packageParts(doc, slides.length, slideH, notesAt));
   return files;
 }
 
-function packageParts(doc, count, slideH) {
+const relsXml = (rels) => `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
+
+function notesSlideParts(text, n) {
+  const paras = text.split("\n").map((l) => (l ? `<a:p><a:r><a:rPr lang="de-DE"/><a:t>${esc(l)}</a:t></a:r></a:p>` : "<a:p/>")).join("");
+  return [
+    {
+      name: `ppt/notesSlides/notesSlide${n}.xml`,
+      text:
+        `${XML_HEAD}<p:notes ${NS_DECL}><p:cSld><p:spTree>${EMPTY_GROUP}` +
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Notizen"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>' +
+        `<p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp>` +
+        "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>",
+    },
+    {
+      name: `ppt/notesSlides/_rels/notesSlide${n}.xml.rels`,
+      text: relsXml(`<Relationship Id="rId1" Type="${REL}/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/slide${n}.xml"/>`),
+    },
+  ];
+}
+
+// Notizen-Master (Pflicht, sobald es Notizseiten gibt): ein Textfeld für die Notizen, eigenes Design.
+function notesMasterParts(t, fonts) {
+  return [
+    {
+      name: "ppt/notesMasters/notesMaster1.xml",
+      text:
+        `${XML_HEAD}<p:notesMaster ${NS_DECL}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${EMPTY_GROUP}` +
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Notizen"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>' +
+        '<p:spPr><a:xfrm><a:off x="685800" y="4400550"/><a:ext cx="5486400" cy="3600450"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>' +
+        '<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="de-DE"/></a:p></p:txBody></p:sp></p:spTree></p:cSld>' +
+        '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>' +
+        '<p:notesStyle><a:lvl1pPr><a:defRPr sz="1200"/></a:lvl1pPr></p:notesStyle></p:notesMaster>',
+    },
+    { name: "ppt/notesMasters/_rels/notesMaster1.xml.rels", text: relsXml(`<Relationship Id="rId1" Type="${REL}/theme" Target="../theme/theme2.xml"/>`) },
+    { name: "ppt/theme/theme2.xml", text: themeXml(t, fonts) },
+  ];
+}
+
+function packageParts(doc, count, slideH, notesAt = []) {
   const range = [...Array(count).keys()];
   const t = doc.theme;
   const fonts = t.fonts ?? {};
@@ -332,6 +376,11 @@ function packageParts(doc, count, slideH) {
         '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
         '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
         range.map((i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join("") +
+        (notesAt.length
+          ? '<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>' +
+            '<Override PartName="/ppt/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+            notesAt.map((n) => `<Override PartName="/ppt/notesSlides/notesSlide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join("")
+          : "") +
         "</Types>",
     },
     {
@@ -358,6 +407,7 @@ function packageParts(doc, count, slideH) {
       text:
         `${XML_HEAD}<p:presentation ${NS_DECL} saveSubsetFonts="1">` +
         '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+        (notesAt.length ? '<p:notesMasterIdLst><p:notesMasterId r:id="rId6"/></p:notesMasterIdLst>' : "") +
         `<p:sldIdLst>${range.map((i) => `<p:sldId id="${256 + i}" r:id="rId${10 + i}"/>`).join("")}</p:sldIdLst>` +
         `<p:sldSz cx="${SLIDE_W}" cy="${slideH}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
     },
@@ -369,6 +419,7 @@ function packageParts(doc, count, slideH) {
           `<Relationship Id="rId3" Type="${REL}/presProps" Target="presProps.xml"/>` +
           `<Relationship Id="rId4" Type="${REL}/viewProps" Target="viewProps.xml"/>` +
           `<Relationship Id="rId5" Type="${REL}/tableStyles" Target="tableStyles.xml"/>` +
+          (notesAt.length ? `<Relationship Id="rId6" Type="${REL}/notesMaster" Target="notesMasters/notesMaster1.xml"/>` : "") +
           range.map((i) => `<Relationship Id="rId${10 + i}" Type="${REL}/slide" Target="slides/slide${i + 1}.xml"/>`).join(""),
       ),
     },
@@ -404,6 +455,7 @@ function packageParts(doc, count, slideH) {
       text: relsDoc(`<Relationship Id="rId1" Type="${REL}/slideMaster" Target="../slideMasters/slideMaster1.xml"/>`),
     },
     { name: "ppt/theme/theme1.xml", text: themeXml(t, fonts) },
+    ...(notesAt.length ? notesMasterParts(t, fonts) : []),
   ];
 }
 
@@ -623,6 +675,14 @@ export function importPptx(entries, title, baseTheme) {
       if (bgColor) break;
     }
     const frame = { id: id("f"), type: "frame", x: fx, y: fy, w: fw, h: fh, title: `Folie ${si + 1}`, fill: bgColor ?? `#${theme.colors.lt1 ?? "ffffff"}` };
+    // Sprechernotizen: Text des Notizfelds (Platzhalter „body“) der Notizseite.
+    const notesPart = [...rels.values()].find((r) => r.type === "notesSlide")?.target;
+    if (notesPart) {
+      const page = parseXml(files.get(notesPart)?.text ?? "<x/>").documentElement;
+      const body = desc(page, "sp").find((sp) => desc(sp, "ph").some((ph) => ph.getAttribute("type") === "body"));
+      const text = desc(body, "p").map((p) => desc(p, "t").map((t) => t.textContent).join("")).join("\n").trim();
+      if (text) frame.notes = text;
+    }
     objects.push(frame);
     path.push(frame.id);
 
