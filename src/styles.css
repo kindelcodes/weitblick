@@ -1646,3 +1646,33 @@ body.presenting .obj.video video {
   bottom: 10%;
   opacity: 0.8;
 }
+
+/* Rückmeldung nach dem Speichern */
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 64px;
+  z-index: 1000;
+  transform: translate(-50%, -8px);
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid #22c55e;
+  background: var(--panel);
+  color: var(--panel-text);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+body.presenting .toast {
+  display: none;
+}

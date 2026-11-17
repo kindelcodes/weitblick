@@ -1968,6 +1968,21 @@ async function confirmDiscard() {
   });
 }
 
+// Kurze Rückmeldung unten in der Mitte, die nach zwei Sekunden verblasst.
+let toastTimer = 0;
+function showToast(text) {
+  let t = document.getElementById("toast");
+  if (!t) {
+    t = Object.assign(document.createElement("div"), { id: "toast", className: "toast" });
+    t.setAttribute("role", "status");
+    document.body.append(t);
+  }
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
+
 async function saveAs() {
   const path = await tauri.dialog.save({ filters: FILTERS, defaultPath: `${doc.title}.weitblick` });
   if (!path) return;
@@ -1989,6 +2004,7 @@ async function save() {
     markSaved();
     clearRecovery();
     rememberRecent(currentPath);
+    showToast(`✓ Gespeichert: ${currentPath.split(/[\\/]/).pop()}`);
   } catch (err) {
     await tauri.dialog.message(String(err), { title: "Speichern fehlgeschlagen", kind: "error" });
   }
