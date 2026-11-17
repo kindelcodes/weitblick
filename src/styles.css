@@ -583,6 +583,58 @@ body:not(.insertbar-open) .insertbar {
 }
 
 /* Kontextleiste: schwebt über der Auswahl, Position setzt positionContextBar(). */
+.geo-pop {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--panel-text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+}
+
+.geo-pop[hidden] {
+  display: none;
+}
+
+.geo-pop label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.geo-pop input[type="number"] {
+  width: 64px;
+  font: inherit;
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--panel-text);
+  background: #fff;
+}
+
+.geo-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.geo-note:empty {
+  display: none;
+}
+
+.guide.gap {
+  background: var(--teal);
+}
+
 .formatbar {
   position: absolute;
   top: 12px;

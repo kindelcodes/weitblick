@@ -84,6 +84,8 @@
           <button id="btn-forward" data-needs="any" title="Eine Ebene nach vorn (Strg+↑)">↑</button>
           <button id="btn-backward" data-needs="any" title="Eine Ebene nach hinten (Strg+↓)">↓</button>
           <button id="btn-back" data-needs="any" title="Ganz nach hinten (Strg+Umschalt+↓)">⤓</button>
+          <button id="btn-geometry" data-needs="any" title="Größe, Position und Drehung genau eingeben">⇲ Maße</button>
+          <button id="btn-arrange" data-needs="multi" title="Ausrichten, verteilen, Größe angleichen">⊞ Ausrichten</button>
         </div>
         <div class="fb-group" data-group="present">
           <button id="btn-add-to-path" data-needs="any" title="Als Schritt an den Pfad anhängen">+ Pfad</button>
@@ -93,6 +95,15 @@
         <div class="fb-group" data-group="delete">
           <button id="btn-delete" data-needs="any" class="danger" title="Löschen (Entf)">🗑</button>
         </div>
+      </div>
+      <div id="geo-pop" class="geo-pop" hidden role="dialog" aria-label="Maße">
+        <label>B <input type="number" id="geo-w" step="any" /></label>
+        <label>H <input type="number" id="geo-h" step="any" /></label>
+        <label class="geo-lock" title="Seitenverhältnis beibehalten"><input type="checkbox" id="geo-lock" /> 🔗</label>
+        <label>X <input type="number" id="geo-x" step="any" /></label>
+        <label>Y <input type="number" id="geo-y" step="any" /></label>
+        <label>∠ <input type="number" id="geo-r" step="any" title="Drehung in Grad" /></label>
+        <p class="geo-note" id="geo-note"></p>
       </div>
       <div class="progress"><div id="progress-bar"></div></div>
       <div class="present-controls">

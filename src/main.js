@@ -928,6 +928,185 @@ function markFrameMembers() {
   for (const p of membersOf(selected)) elOf(p)?.classList.add("frame-member");
 }
 
+// ---------- Maße, Ausrichten, Angleichen ----------
+// Eine Gruppe zählt als eine Einheit; Rahmen nehmen beim Verschieben ihren Inhalt mit.
+
+function boxOf(list) {
+  const x = Math.min(...list.map((o) => o.x));
+  const y = Math.min(...list.map((o) => o.y));
+  return { x, y, w: Math.max(...list.map((o) => o.x + o.w)) - x, h: Math.max(...list.map((o) => o.y + o.h)) - y };
+}
+
+function arrangeUnits() {
+  const map = new Map();
+  for (const o of selection) {
+    if (o.hidden) continue;
+    const k = o.group ?? o.id;
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(o);
+  }
+  return [...map.values()].map((items) => ({ items, ...boxOf(items) }));
+}
+
+function moveUnit(u, dx, dy) {
+  for (const p of withContents(u.items)) {
+    p.x += dx;
+    p.y += dy;
+    updateEl(p);
+  }
+  u.x += dx;
+  u.y += dy;
+}
+
+// Skaliert eine Einheit um ihre linke obere Ecke. Schriften wachsen nur bei Gruppen und nur gleichmäßig mit.
+function scaleUnit(u, w, h) {
+  const fx = w / u.w;
+  const fy = h / u.h;
+  for (const p of u.items) {
+    p.x = u.x + (p.x - u.x) * fx;
+    p.y = u.y + (p.y - u.y) * fy;
+    p.w *= fx;
+    p.h *= fy;
+    if (p.size && u.items.length > 1 && Math.abs(fx - fy) < 1e-9) p.size *= fx;
+    updateEl(p);
+  }
+  u.w = w;
+  u.h = h;
+}
+
+function arrange(op) {
+  const units = arrangeUnits();
+  if (units.length < 2) return;
+  checkpoint();
+  const all = boxOf(units);
+  const ref = units[0]; // zuerst ausgewählt
+  for (const u of units) {
+    if (op === "left") moveUnit(u, all.x - u.x, 0);
+    if (op === "hcenter") moveUnit(u, all.x + all.w / 2 - (u.x + u.w / 2), 0);
+    if (op === "right") moveUnit(u, all.x + all.w - (u.x + u.w), 0);
+    if (op === "top") moveUnit(u, 0, all.y - u.y);
+    if (op === "vcenter") moveUnit(u, 0, all.y + all.h / 2 - (u.y + u.h / 2));
+    if (op === "bottom") moveUnit(u, 0, all.y + all.h - (u.y + u.h));
+    if (op === "same-w") scaleUnit(u, ref.w, u.h);
+    if (op === "same-h") scaleUnit(u, u.w, ref.h);
+    if (op === "same-size") scaleUnit(u, ref.w, ref.h);
+  }
+  // Verteilen: gleiche Abstände zwischen den Einheiten, die äußeren bleiben stehen.
+  if (op === "dist-h" || op === "dist-v") {
+    const [p, s] = op === "dist-h" ? ["x", "w"] : ["y", "h"];
+    const sorted = [...units].sort((a, b) => a[p] - b[p]);
+    const gap = (all[s] - sorted.reduce((t, u) => t + u[s], 0)) / (sorted.length - 1);
+    let at = all[p];
+    for (const u of sorted) {
+      const d = at - u[p];
+      moveUnit(u, p === "x" ? d : 0, p === "y" ? d : 0);
+      at += u[s] + gap;
+    }
+  }
+  updateGroupBox();
+  updateToolbar();
+}
+
+function arrangeMenuItems() {
+  const n = arrangeUnits().length;
+  return [
+    { label: "Links ausrichten", run: () => arrange("left") },
+    { label: "Horizontal zentrieren", run: () => arrange("hcenter") },
+    { label: "Rechts ausrichten", run: () => arrange("right") },
+    { label: "Oben ausrichten", run: () => arrange("top") },
+    { label: "Vertikal zentrieren", run: () => arrange("vcenter") },
+    { label: "Unten ausrichten", run: () => arrange("bottom") },
+    "-",
+    n > 2 && { label: "Horizontal verteilen", run: () => arrange("dist-h") },
+    n > 2 && { label: "Vertikal verteilen", run: () => arrange("dist-v") },
+    "-",
+    { label: "Gleiche Breite (wie zuerst gewählt)", run: () => arrange("same-w") },
+    { label: "Gleiche Höhe (wie zuerst gewählt)", run: () => arrange("same-h") },
+    { label: "Gleiche Größe (wie zuerst gewählt)", run: () => arrange("same-size") },
+  ].filter(Boolean);
+}
+
+document.getElementById("btn-arrange").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const b = e.currentTarget.getBoundingClientRect();
+  buildMenu(arrangeMenuItems(), ctxMenu);
+  ctxMenu.classList.add("open");
+  ctxMenu.style.left = `${b.left}px`;
+  ctxMenu.style.top = `${b.bottom + 4}px`;
+});
+
+// Maße-Feld: bei einer Einheit deren Kasten, bei mehreren gilt Breite/Höhe/Drehung für jede, X/Y verschiebt alle.
+const geoPop = document.getElementById("geo-pop");
+const geo = Object.fromEntries(["w", "h", "x", "y", "r", "lock"].map((k) => [k, document.getElementById(`geo-${k}`)]));
+const round = (v) => Math.round(v * 10) / 10;
+
+function updateGeomFields() {
+  if (geoPop.hidden) return;
+  const units = arrangeUnits();
+  if (!units.length) {
+    geoPop.hidden = true;
+    return;
+  }
+  const all = boxOf(units);
+  const one = units.length === 1;
+  for (const k of ["w", "h", "x", "y", "r"]) if (document.activeElement !== geo[k]) geo[k].value = "";
+  if (document.activeElement !== geo.x) geo.x.value = round(all.x);
+  if (document.activeElement !== geo.y) geo.y.value = round(all.y);
+  if (one && document.activeElement !== geo.w) geo.w.value = round(all.w);
+  if (one && document.activeElement !== geo.h) geo.h.value = round(all.h);
+  const rots = new Set(selection.filter((o) => !o.hidden).map((o) => o.rot ?? 0));
+  if (rots.size === 1 && document.activeElement !== geo.r) geo.r.value = round([...rots][0]);
+  geo.lock.checked ||= selected?.type === "image" && one;
+  document.getElementById("geo-note").textContent = one ? "" : `${units.length} Objekte: Breite, Höhe und Drehung gelten für jedes.`;
+}
+
+function applyGeom(key) {
+  const v = Number(geo[key].value);
+  if (geo[key].value === "" || !Number.isFinite(v) || ((key === "w" || key === "h") && v <= 0)) return;
+  const units = arrangeUnits();
+  if (!units.length) return;
+  checkpoint();
+  if (key === "x" || key === "y") {
+    const all = boxOf(units);
+    for (const u of units) moveUnit(u, key === "x" ? v - all.x : 0, key === "y" ? v - all.y : 0);
+  } else if (key === "w" || key === "h") {
+    for (const u of units) {
+      const w = key === "w" ? v : geo.lock.checked ? (v * u.w) / u.h : u.w;
+      const h = key === "h" ? v : geo.lock.checked ? (v * u.h) / u.w : u.h;
+      scaleUnit(u, w, h);
+    }
+  } else if (key === "r") {
+    for (const o of selection.filter((o) => !o.hidden)) {
+      o.rot = ((v % 360) + 360) % 360 || 0;
+      updateEl(o);
+    }
+  }
+  updateGroupBox();
+  updateToolbar();
+}
+
+for (const k of ["w", "h", "x", "y", "r"]) {
+  geo[k].addEventListener("change", () => applyGeom(k));
+  geo[k].addEventListener("keydown", (e) => {
+    e.stopPropagation(); // Ziffern, Entf und Pfeile gehören dem Feld, nicht der Leinwand
+    if (e.key === "Enter") geo[k].blur();
+    if (e.key === "Escape") geoPop.hidden = true;
+  });
+}
+
+// Klicks und Mausrad im Feld gehören nicht der Leinwand darunter.
+for (const ev of ["pointerdown", "wheel", "dblclick", "contextmenu"]) geoPop.addEventListener(ev, (e) => e.stopPropagation());
+
+document.getElementById("btn-geometry").addEventListener("click", (e) => {
+  e.stopPropagation();
+  geoPop.hidden = !geoPop.hidden;
+  const b = e.currentTarget.getBoundingClientRect();
+  const v = viewport.getBoundingClientRect();
+  geoPop.style.left = `${Math.min(b.left - v.left, v.width - 260)}px`;
+  geoPop.style.top = `${b.bottom - v.top + 6}px`;
+  updateGeomFields();
+});
+
 // ---------- Ebenen: nach vorn und nach hinten ----------
 // Die Reihenfolge in doc.objects ist die Zeichenreihenfolge; der unsichtbare Überblick bleibt immer ganz hinten.
 
@@ -1040,6 +1219,7 @@ function updateToolbar() {
       (need === "image" && selected.type !== "image") ||
       (need === "frame-add" && !frameTarget()) ||
       (need === "frame-remove" && !selection.some((o) => o.type !== "frame" && inAnyFrame(o))) ||
+      (need === "multi" && arrangeUnits().length < 2) ||
       (need === "radius" && !selection.some(hasCorners));
     // In der Kontextleiste steht nur, was zum ausgewählten Objekt passt.
     if (formatbar.contains(b)) (b.closest("label") ?? b).hidden = b.disabled;
@@ -1055,6 +1235,8 @@ function updateToolbar() {
   // Formatleiste zeigt den Zustand des ausgewählten Objekts.
   formatbar.classList.toggle("visible", !!selected && !presenting);
   positionContextBar();
+  if (!selected || presenting) geoPop.hidden = true;
+  updateGeomFields();
   if (!selected) return;
   if (colored) colorInput.value = toHex(selected[colorKey(selected)] ?? defaultColor(selected));
   if (isText) {
@@ -1521,6 +1703,7 @@ viewport.addEventListener("pointermove", (e) => {
     // Bilder behalten ihr Seitenverhältnis, andere Objekte nur mit gedrückter Umschalttaste.
     const keepAspect = o.type === "image" ? !e.shiftKey : e.shiftKey;
     o.h = keepAspect ? o.w * (gesture.h / gesture.w) : Math.max(minSize, gesture.h + ly);
+    if (!e.altKey && !o.rot) snapResize(gesture, o, keepAspect);
     updateEl(o);
   }
 });
@@ -1559,9 +1742,9 @@ function clearGuides() {
   world.querySelectorAll(".guide").forEach((g) => g.remove());
 }
 
-function showGuide(axis, pos, from, to) {
+function showGuide(axis, pos, from, to, kind = "") {
   const g = document.createElement("div");
-  g.className = `guide ${axis}`;
+  g.className = `guide ${axis} ${kind}`;
   if (axis === "v") Object.assign(g.style, { left: `${pos}px`, top: `${from}px`, height: `${to - from}px` });
   else Object.assign(g.style, { top: `${pos}px`, left: `${from}px`, width: `${to - from}px` });
   world.append(g);
@@ -1597,6 +1780,31 @@ function snapMove(g, dx, dy) {
       }
     }
   }
+  // Gleiche Abstände: liegt der Kasten in einer Reihe mit zwei anderen Objekten, rastet er so ein, dass
+  // die Lücken gleich groß sind (zwischen beiden oder als Fortsetzung der Reihe).
+  for (const [axis, p, s, q, t] of [["v", "x", "w", "y", "h"], ["h", "y", "h", "x", "w"]]) {
+    const row = others
+      .filter((o) => o.type !== "frame" && o[q] < b[q] + b[t] && o[q] + o[t] > b[q])
+      .sort((m, n) => m[p] - n[p]);
+    for (let i = 0; i + 1 < row.length; i++) {
+      const A = row[i];
+      const B = row[i + 1];
+      const aEnd = A[p] + A[s];
+      const g = B[p] - aEnd;
+      if (g <= 0) continue;
+      const tries = [
+        { at: (aEnd + B[p] - b[s]) / 2, gaps: (at) => [[aEnd, at], [at + b[s], B[p]]] },
+        { at: B[p] + B[s] + g, gaps: (at) => [[aEnd, B[p]], [B[p] + B[s], at]] },
+        { at: A[p] - g - b[s], gaps: (at) => [[at + b[s], A[p]], [aEnd, B[p]]] },
+      ];
+      for (const c of tries) {
+        const d = c.at - b[p];
+        if (c.gaps(c.at).some(([f, e]) => e - f <= 0)) continue;
+        // Bei Gleichstand gewinnt der Abstand: er sagt mehr als eine Kantenlinie an derselben Stelle.
+        if (Math.abs(d) <= tol && (!best[axis] || Math.abs(d) <= Math.abs(best[axis].d))) best[axis] = { d, gaps: c.gaps(c.at) };
+      }
+    }
+  }
   let sx = dx + (best.v?.d ?? 0);
   let sy = dy + (best.h?.d ?? 0);
   if (gridOn) {
@@ -1606,15 +1814,41 @@ function snapMove(g, dx, dy) {
   }
   clearGuides();
   const nb = { x: box.x + sx, y: box.y + sy, w: box.w, h: box.h };
-  if (best.v) {
+  // Gleiche Abstände: die beiden Lücken als kurze Linien auf halber Höhe bzw. Breite des Kastens.
+  if (best.v?.gaps) for (const [f, e] of best.v.gaps) showGuide("h", nb.y + nb.h / 2, f, e, "gap");
+  else if (best.v) {
     const o = best.v.o;
     showGuide("v", best.v.t, Math.min(nb.y, o.y), Math.max(nb.y + nb.h, o.y + o.h));
   }
-  if (best.h) {
+  if (best.h?.gaps) for (const [f, e] of best.h.gaps) showGuide("v", nb.x + nb.w / 2, f, e, "gap");
+  else if (best.h) {
     const o = best.h.o;
     showGuide("h", best.h.t, Math.min(nb.x, o.x), Math.max(nb.x + nb.w, o.x + o.w));
   }
   return [sx, sy];
+}
+
+// Beim Größe-Ändern: rechte bzw. untere Kante rastet an Kanten anderer Objekte ein, Breite und Höhe an
+// den Maßen anderer Objekte (gleich groß). Nur für ungedrehte Objekte.
+function snapResize(g, o, keepAspect) {
+  g.others ??= doc.objects.filter((p) => !p.hidden && p !== o);
+  const tol = SNAP_PX / zoom();
+  clearGuides();
+  const pick = (cur, cands) => cands.reduce((m, c) => (Math.abs(c.v - cur) <= tol && (!m || Math.abs(c.v - cur) < Math.abs(m.v - cur)) ? c : m), null);
+  const wHit = pick(o.w, g.others.flatMap((p) => [{ v: p.w, size: p }, { v: p.x - o.x, edge: p.x }, { v: p.x + p.w - o.x, edge: p.x + p.w }]).filter((c) => c.v > 0));
+  if (wHit) {
+    if (keepAspect) o.h *= wHit.v / o.w;
+    o.w = wHit.v;
+    showGuide("v", o.x + o.w, o.y, o.y + o.h);
+    if (wHit.size) showGuide("v", wHit.size.x + wHit.size.w, wHit.size.y, wHit.size.y + wHit.size.h);
+  }
+  if (keepAspect) return;
+  const hHit = pick(o.h, g.others.flatMap((p) => [{ v: p.h, size: p }, { v: p.y - o.y, edge: p.y }, { v: p.y + p.h - o.y, edge: p.y + p.h }]).filter((c) => c.v > 0));
+  if (hHit) {
+    o.h = hHit.v;
+    showGuide("h", o.y + o.h, o.x, o.x + o.w);
+    if (hHit.size) showGuide("h", hHit.size.y + hHit.size.h, hHit.size.x, hHit.size.x + hHit.size.w);
+  }
 }
 
 const endGesture = (e) => {
@@ -1623,6 +1857,7 @@ const endGesture = (e) => {
   viewport.classList.remove("dragging");
   clearGuides();
   if (g?.before && snapshot() !== g.before) checkpoint(g.before);
+  updateGeomFields();
   if (g?.kind === "marquee") {
     g.box.remove();
     if (g.end) {
@@ -2826,6 +3061,7 @@ function objectMenu(at) {
         { label: "Ganz nach hinten", keys: "Strg+Umschalt+↓", run: () => reorder("back") },
       ],
     },
+    arrangeUnits().length > 1 && { label: "Ausrichten und angleichen", sub: arrangeMenuItems() },
     selection.length > 1 && { label: "Gruppieren", keys: "Strg+G", run: groupSelection },
     selection.some((o) => o.group) && { label: "Gruppierung aufheben", keys: "Strg+Umschalt+G", run: ungroupSelection },
     frameTarget() && { label: "In den Rahmen aufnehmen", run: addToFrame },
