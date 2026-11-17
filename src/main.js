@@ -1764,6 +1764,8 @@ function showGuide(axis, pos, from, to, kind = "") {
   g.className = `guide ${axis} ${kind}`;
   if (axis === "v") Object.assign(g.style, { left: `${pos}px`, top: `${from}px`, height: `${to - from}px` });
   else Object.assign(g.style, { top: `${pos}px`, left: `${from}px`, width: `${to - from}px` });
+  // Abstandsmarken tragen ihre Länge in Leinwand-Pixeln.
+  if (kind === "gap") g.append(Object.assign(document.createElement("span"), { className: "gap-label", textContent: `${Math.round(to - from)}` }));
   world.append(g);
 }
 

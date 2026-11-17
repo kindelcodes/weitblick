@@ -1676,3 +1676,26 @@ body.presenting .obj.video video {
 body.presenting .toast {
   display: none;
 }
+
+/* Zahl an der Abstandsmarke: in Bildschirmgröße, über (bzw. neben) dem Balken */
+.gap-label {
+  position: absolute;
+  padding: 0 calc(4px * var(--inv, 1));
+  border-radius: calc(4px * var(--inv, 1));
+  background: #22c55e;
+  color: #fff;
+  font: 600 calc(11px * var(--inv, 1)) / 1.5 "Segoe UI", "Noto Sans", sans-serif;
+  white-space: nowrap;
+}
+
+.guide.h .gap-label {
+  left: 50%;
+  bottom: calc(5px * var(--inv, 1));
+  transform: translateX(-50%);
+}
+
+.guide.v .gap-label {
+  top: 50%;
+  left: calc(6px * var(--inv, 1));
+  transform: translateY(-50%);
+}
