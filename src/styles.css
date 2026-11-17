@@ -153,6 +153,7 @@ body.insertbar-open {
 .obj.text[contenteditable="plaintext-only"] {
   outline: calc(2px * var(--inv, 1)) dashed var(--orange);
   cursor: text;
+  user-select: text;
 }
 
 .obj.hidden-frame {
@@ -1071,6 +1072,8 @@ body.presenting:not(.show-controls) .viewport {
   left: 0;
   top: 0;
   transform-origin: 0 0;
+  /* Ziehen auf der Leinwand markiert keinen Text; nur beim Bearbeiten eines Texts (s. o.). */
+  user-select: none;
 }
 
 .obj {

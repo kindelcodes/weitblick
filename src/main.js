@@ -1574,6 +1574,14 @@ function hitObject(e) {
 
 let gesture = null;
 
+function handleAt(e) {
+  const handles = [...(groupBox.isConnected ? groupBox.querySelectorAll(".handle") : []), ...selection.flatMap((o) => [...(elOf(o)?.querySelectorAll(":scope > .handle, :scope > .rot-handle") ?? [])])];
+  return handles.find((h) => {
+    const r = h.getBoundingClientRect();
+    return e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2;
+  });
+}
+
 viewport.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1) return;
   // Leisten über der Leinwand bekommen ihre Klicks selbst, sonst würde die Zeigererfassung sie schlucken.
@@ -1591,8 +1599,11 @@ viewport.addEventListener("pointerdown", (e) => {
   camera.stop();
   const start = eventToWorld(e);
 
-  if (e.button === 0 && e.target.classList.contains("handle") && selected) {
-    gesture = e.target.classList.contains("group-handle")
+  // Anfasser der Auswahl nach ihrer Lage treffen: oft liegt ein Rahmen darüber (z. B. nach Prezi-Import)
+  // und bekäme sonst den Klick – das Ziehen würde dann Text markieren statt die Größe ändern.
+  const hit = (e.button === 0 && selected && handleAt(e)) || e.target;
+  if (e.button === 0 && hit.classList.contains("handle") && selected) {
+    gesture = hit.classList.contains("group-handle")
       ? {
           kind: "group-resize",
           start,
@@ -1601,7 +1612,7 @@ viewport.addEventListener("pointerdown", (e) => {
           before: snapshot(),
         }
       : { kind: "resize", start, o: selected, w: selected.w, h: selected.h, before: snapshot() };
-  } else if (e.button === 0 && e.target.classList.contains("rot-handle") && selected) {
+  } else if (e.button === 0 && hit.classList.contains("rot-handle") && selected) {
     const o = selected;
     gesture = { kind: "rotate", o, center: { x: o.x + o.w / 2, y: o.y + o.h / 2 }, before: snapshot() };
   } else {
@@ -1906,10 +1917,11 @@ function zoomAt(factor, sx, sy) {
 // Doppelklick: Text bearbeiten, sonst zum kleinsten Rahmen unter dem Zeiger fliegen.
 viewport.addEventListener("dblclick", (e) => {
   if (presenting || e.target.closest(".formatbar")) return;
-  // Wegen der Zeigererfassung ist e.target hier der Viewport, also selbst nachsehen.
-  const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".obj.text");
-  if (el) {
-    startEditing(byId.get(el.dataset.id));
+  // Wegen der Zeigererfassung ist e.target hier der Viewport, also selbst nachsehen; hitObject übergeht
+  // Rahmen, die über dem Text liegen (außer an ihrer Kante).
+  const o = hitObject(e);
+  if (o?.type === "text") {
+    startEditing(o);
     return;
   }
   const p = eventToWorld(e);
