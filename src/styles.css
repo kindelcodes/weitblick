@@ -632,8 +632,22 @@ body:not(.insertbar-open) .insertbar {
   display: none;
 }
 
+/* Gleiche Abstände: kräftig grün, 3 px, mit kleinen Endstrichen (Ränder) wie eine Bemaßung */
 .guide.gap {
-  background: var(--teal);
+  background: #22c55e;
+  z-index: 31;
+}
+
+.guide.h.gap {
+  height: calc(3px * var(--inv, 1));
+  border-left: calc(2px * var(--inv, 1)) solid #22c55e;
+  border-right: calc(2px * var(--inv, 1)) solid #22c55e;
+  box-shadow: 0 0 0 calc(1px * var(--inv, 1)) rgba(255, 255, 255, 0.7);
+}
+
+.guide.v.gap {
+  width: calc(3px * var(--inv, 1));
+  box-shadow: 0 0 0 calc(1px * var(--inv, 1)) rgba(255, 255, 255, 0.7);
 }
 
 .formatbar {

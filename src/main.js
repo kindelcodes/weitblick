@@ -689,7 +689,7 @@ notesBox.addEventListener("blur", () => {
 });
 // Tippen in den Notizen darf keine Tastenkürzel der Leinwand auslösen.
 notesBox.addEventListener("keydown", (e) => {
-  e.stopPropagation();
+  if (!(e.ctrlKey && e.key.toLowerCase() === "s")) e.stopPropagation(); // Strg+S speichert auch von hier
   if (e.key === "Escape") notesBox.blur();
 });
 
@@ -1089,7 +1089,7 @@ function applyGeom(key) {
 for (const k of ["w", "h", "x", "y", "r"]) {
   geo[k].addEventListener("change", () => applyGeom(k));
   geo[k].addEventListener("keydown", (e) => {
-    e.stopPropagation(); // Ziffern, Entf und Pfeile gehören dem Feld, nicht der Leinwand
+    if (!(e.ctrlKey && e.key.toLowerCase() === "s")) e.stopPropagation(); // Ziffern, Entf, Pfeile gehören dem Feld; Strg+S speichert
     if (e.key === "Enter") geo[k].blur();
     if (e.key === "Escape") geoPop.hidden = true;
   });
@@ -1617,8 +1617,8 @@ viewport.addEventListener("pointerdown", (e) => {
     gesture = { kind: "rotate", o, center: { x: o.x + o.w / 2, y: o.y + o.h / 2 }, before: snapshot() };
   } else {
     const o = e.button === 0 ? hitObject(e) : null;
-    if (o && e.shiftKey) {
-      select(o, true); // Umschalt+Klick: zur Auswahl hinzufügen oder entfernen
+    if (o && (e.shiftKey || e.ctrlKey)) {
+      select(o, true); // Umschalt- oder Strg+Klick: zur Auswahl hinzufügen oder entfernen
       return;
     }
     if (o) {
@@ -1627,8 +1627,8 @@ viewport.addEventListener("pointerdown", (e) => {
       if (!selection.includes(o)) select(o);
       // Alle ausgewählten Objekte bewegen sich gemeinsam, Rahmen mit ihrem Inhalt.
       const items = withContents(selection).map((p) => ({ p, x: p.x, y: p.y }));
-      gesture = { kind: "move", start, items, before: snapshot(), drill };
-    } else if (e.button === 0 && e.shiftKey) {
+      gesture = { kind: "move", start, items, before: snapshot(), drill, cx: e.clientX, cy: e.clientY };
+    } else if (e.button === 0 && (e.shiftKey || e.ctrlKey)) {
       // Umschalt+Ziehen auf leerer Fläche: Auswahlrechteck.
       const box = document.createElement("div");
       box.className = "marquee";
@@ -1684,6 +1684,9 @@ viewport.addEventListener("pointermove", (e) => {
   const dx = p.x - gesture.start.x;
   const dy = p.y - gesture.start.y;
   if (gesture.kind === "move") {
+    // Erst ab 5 px Weg ist es ein Verschieben; darunter ein Klick (sonst rückt das Einrasten Objekte beim Klicken).
+    if (!gesture.live && Math.hypot(e.clientX - gesture.cx, e.clientY - gesture.cy) < 5) return;
+    gesture.live = true;
     // Einrasten an Hilfslinien bzw. am Raster; mit gedrückter Alt-Taste frei.
     const [sx, sy] = e.altKey ? (clearGuides(), [dx, dy]) : snapMove(gesture, dx, dy);
     for (const it of gesture.items) {
@@ -1872,7 +1875,7 @@ const endGesture = (e) => {
   clearGuides();
   const moved = g?.before && snapshot() !== g.before;
   if (moved) checkpoint(g.before);
-  else if (g?.drill) setSelection([g.drill]);
+  else if (g?.drill && !g.live) setSelection([g.drill]);
   updateGeomFields();
   if (g?.kind === "marquee") {
     g.box.remove();
