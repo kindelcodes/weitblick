@@ -66,7 +66,10 @@
         $("next").textContent = p.next ? `Als Nächstes: ${p.next}` : "Letzter Schritt";
       });
       listen("presenter-thumbs", ({ payload: p }) => {
-        for (const [id, src] of [["thumb-cur", p.cur], ["thumb-next", p.next]]) src ? uid=197610(Nils Kindel) gid=197121 groups=197121.setAttribute("src", src) : uid=197610(Nils Kindel) gid=197121 groups=197121.removeAttribute("src");
+        for (const [id, src] of [["thumb-cur", p.cur], ["thumb-next", p.next]]) {
+          if (src) $(id).setAttribute("src", src);
+          else $(id).removeAttribute("src");
+        }
       });
       const send = (cmd) => emit("presenter-cmd", cmd);
       for (const b of document.querySelectorAll("button")) b.addEventListener("click", () => send(b.dataset.cmd));
