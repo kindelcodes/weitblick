@@ -1781,3 +1781,39 @@ body.painting .obj {
   background: #fff;
   color: inherit;
 }
+
+/* Stil-Reiter: einklappbare Abschnitte */
+.insertbar details.sec {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.insertbar details.sec > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 2px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.insertbar details.sec > summary::-webkit-details-marker {
+  display: none;
+}
+
+.insertbar details.sec > summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.insertbar details.sec[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.insertbar details.sec > summary:hover {
+  color: var(--accent);
+}
