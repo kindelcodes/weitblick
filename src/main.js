@@ -199,10 +199,46 @@ function makeEl(o) {
       };
       if (e.key === "Tab" && !e.shiftKey) insert("   ");
       else if (e.key === "Enter" && !e.shiftKey && /^ *• /m.test(el.innerText)) insert("\n• ");
+      // Unterstreichen kennt das Textmodell nicht; der Browser würde es sonst einfügen und es ginge verloren.
+      else if (e.ctrlKey && e.key.toLowerCase() === "u") e.preventDefault();
+    });
+    // Eingefügt wird nur reiner Text, nicht das Format der Quelle.
+    el.addEventListener("paste", (e) => {
+      if (!el.isContentEditable) return;
+      e.preventDefault();
+      document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "");
     });
   }
   updateEl(o, el);
   return el;
+}
+
+// Textinhalt zeichnen. Aufzählungen („• …“, je drei Leerzeichen davor = eine Ebene tiefer) wie in Prezi: pro
+// Ebene 0,75 em eingerückt, Folgezeilen beginnen unter dem Text statt unter dem Punkt. Formatierte Abschnitte
+// (o.spans) als <span>.
+function renderText(o, el) {
+  el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove());
+  if (/^\s*• /m.test(o.text)) {
+    let at = 0;
+    el.replaceChildren(
+      ...o.text.split("\n").map((line) => {
+        const div = document.createElement("div");
+        const m = line.match(/^( *)• /);
+        if (m) {
+          // Die Leerzeichen bleiben im Text (beim Bearbeiten bleibt die Ebene erhalten), je etwa 0,25 em breit.
+          const lead = 0.6 + m[1].length * 0.25;
+          Object.assign(div.style, { paddingLeft: `${0.75 + lead}em`, textIndent: `-${lead}em` });
+        }
+        if (line) appendRich(div, line, o.spans, at);
+        else div.textContent = "​";
+        at += line.length + 1;
+        return div;
+      }),
+    );
+  } else {
+    el.replaceChildren();
+    appendRich(el, o.text, o.spans, 0);
+  }
 }
 
 function updateEl(o, el = elOf(o)) {
@@ -238,25 +274,7 @@ function updateEl(o, el = elOf(o)) {
     el.classList.toggle("missing", !m);
   }
   if (o.type === "text") {
-    if (!el.isContentEditable) {
-      // Aufzählungen („• …“, je drei Leerzeichen davor = eine Ebene tiefer) wie in Prezi: pro Ebene 0,75 em
-      // eingerückt, Folgezeilen beginnen unter dem Text statt unter dem Punkt.
-      if (/^\s*• /m.test(o.text)) {
-        el.replaceChildren(
-          ...o.text.split("\n").map((line) => {
-            const div = document.createElement("div");
-            const m = line.match(/^( *)• /);
-            if (m) {
-              // Die Leerzeichen bleiben im Text (beim Bearbeiten bleibt die Ebene erhalten), je etwa 0,25 em breit.
-              const lead = 0.6 + m[1].length * 0.25;
-              Object.assign(div.style, { paddingLeft: `${0.75 + lead}em`, textIndent: `-${lead}em` });
-            }
-            div.textContent = line || "​";
-            return div;
-          }),
-        );
-      } else el.textContent = o.text;
-    }
+    if (!el.isContentEditable) renderText(o, el);
     Object.assign(el.style, {
       fontSize: `${o.size}px`,
       color: o.color || doc.theme.text,
@@ -1421,6 +1439,10 @@ const ALIGN_ICONS = { left: "⇤", center: "⇔", right: "⇥" };
 const formatbar = document.getElementById("formatbar");
 const colorInput = document.getElementById("inp-color");
 const fontSelect = document.getElementById("sel-font");
+// Knöpfe der Formatleiste nehmen dem bearbeiteten Text nicht den Fokus: so wirken B und I auf die Markierung.
+formatbar.addEventListener("mousedown", (e) => {
+  if (e.target.closest("button")) e.preventDefault();
+});
 
 // Welches Feld eines Objekts die Farbe trägt.
 function colorKey(o) {
@@ -1479,6 +1501,9 @@ colorInput.addEventListener("input", () => {
   const targets = selection.filter((o) => colorKey(o));
   if (!targets.length) return;
   colorBefore ??= snapshot();
+  // Beim Bearbeiten markierte Wörter: nur sie einfärben.
+  const r = selected?.type === "text" && editedRange(selected);
+  if (r) return formatRange(selected, r, (sts) => sts.map((st) => ({ ...st, c: colorInput.value })), false);
   for (const o of targets) {
     o[colorKey(o)] = colorInput.value;
     updateEl(o);
@@ -1500,15 +1525,204 @@ roleSelect.addEventListener("change", () =>
   }, isText),
 );
 
+// ---------- Gemischte Formatierung ----------
+// o.spans = [{ s, e, b?, i?, c? }]: Abschnitte von o.text mit eigener Fettung, Kursivschrift oder Farbe
+// (b/i: true/false, c: Farbe). Ohne spans gilt das Format des ganzen Textes.
+
+const runStyle = (r) => ({
+  ...(r.b !== undefined && { fontWeight: r.b ? "700" : "400" }),
+  ...(r.i !== undefined && { fontStyle: r.i ? "italic" : "normal" }),
+  ...(r.c && { color: r.c }),
+});
+
+// Hängt text (steht in o.text ab Position at) an parent an, formatierte Abschnitte als <span>.
+function appendRich(parent, text, spans, at) {
+  const cuts = new Set([0, text.length]);
+  for (const r of spans ?? []) for (const x of [r.s - at, r.e - at]) if (x > 0 && x < text.length) cuts.add(x);
+  const pts = [...cuts].sort((a, b) => a - b);
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const piece = text.slice(pts[k], pts[k + 1]);
+    const r = spans?.find((r) => r.s <= at + pts[k] && r.e >= at + pts[k + 1]);
+    if (!r) parent.append(piece);
+    else {
+      const sp = document.createElement("span");
+      Object.assign(sp.style, runStyle(r));
+      sp.textContent = piece;
+      parent.append(sp);
+    }
+  }
+}
+
+const rgbHex = (c) => {
+  const m = c.match(/\d+(\.\d+)?/g);
+  return m && c.startsWith("rgb") ? `#${m.slice(0, 3).map((v) => Math.round(+v).toString(16).padStart(2, "0")).join("")}` : c;
+};
+
+function baseStyle(o) {
+  return { b: textWeight(o) >= 600, i: textItalic(o), c: rgbHex(toHex(o.color || doc.theme.text)).toLowerCase() };
+}
+
+// Pro Zeichen das eigene Format; packSpans fasst wieder zusammen und lässt weg, was dem Grundformat entspricht.
+function charStyles(o) {
+  const a = Array.from({ length: o.text.length }, () => ({}));
+  for (const { s, e, ...st } of o.spans ?? []) for (let k = s; k < e && k < a.length; k++) a[k] = { ...st };
+  return a;
+}
+
+function packSpans(o, styles) {
+  const base = baseStyle(o);
+  const out = [];
+  styles.forEach((st, k) => {
+    const c = {};
+    if (st.b !== undefined && st.b !== base.b) c.b = st.b;
+    if (st.i !== undefined && st.i !== base.i) c.i = st.i;
+    if (st.c && st.c.toLowerCase() !== base.c) c.c = st.c;
+    if (!Object.keys(c).length) return;
+    const last = out.at(-1);
+    if (last && last.e === k && last.b === c.b && last.i === c.i && last.c === c.c) last.e = k + 1;
+    else out.push({ s: k, e: k + 1, ...c });
+  });
+  if (out.length) o.spans = out;
+  else delete o.spans;
+}
+
+// Liest Text und Format pro Zeichen aus dem bearbeiteten Element. Der Text kommt aus innerText (Zeilen wie im
+// Browser); jeder Textknoten wird darin der Reihe nach wiedergefunden, so lassen sich Format und Auswahl zuordnen.
+function readRich(el) {
+  const text = el.innerText.replace(/​/g, "");
+  const nodes = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let at = 0;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const d = n.data.replace(/​/g, "");
+    if (!d) {
+      nodes.push({ node: n, start: at, len: 0 });
+      continue;
+    }
+    const idx = text.indexOf(d, at);
+    if (idx < 0) continue;
+    nodes.push({ node: n, start: idx, len: d.length });
+    at = idx + d.length;
+  }
+  const styles = Array.from({ length: text.length }, () => ({}));
+  for (const { node, start, len } of nodes) {
+    if (!len) continue;
+    const cs = getComputedStyle(node.parentElement);
+    const st = { b: parseInt(cs.fontWeight, 10) >= 600, i: cs.fontStyle === "italic", c: rgbHex(cs.color) };
+    for (let k = start; k < start + len; k++) styles[k] = st;
+  }
+  return { text, styles, nodes };
+}
+
+// Auswahl im bearbeiteten Element als Positionen [s, e) im Text (null ohne Auswahl).
+function editSelection(el) {
+  const sel = getSelection();
+  if (!sel.rangeCount || sel.isCollapsed || !el.contains(sel.anchorNode)) return null;
+  const { nodes } = readRich(el);
+  const textNodes = (root) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const out = [];
+    for (let x = w.nextNode(); x; x = w.nextNode()) out.push(x);
+    return out;
+  };
+  const pos = (node, off) => {
+    if (node.nodeType !== 3) {
+      const child = node.childNodes[off];
+      const t = child ? textNodes(child)[0] ?? (child.nodeType === 3 ? child : null) : textNodes(node).at(-1);
+      if (!t) return child ? (nodes.find((n) => node.compareDocumentPosition(n.node) & Node.DOCUMENT_POSITION_FOLLOWING)?.start ?? 0) : 0;
+      [node, off] = child ? [t, 0] : [t, t.data.length];
+    }
+    const hit = nodes.find((n) => n.node === node);
+    return hit ? hit.start + node.data.slice(0, off).replace(/​/g, "").length : 0;
+  };
+  const a = pos(sel.anchorNode, sel.anchorOffset);
+  const b = pos(sel.focusNode, sel.focusOffset);
+  return a === b ? null : [Math.min(a, b), Math.max(a, b)];
+}
+
+// Setzt die Auswahl im Element wieder auf [s, e) (nach dem Neuzeichnen beim Formatieren).
+function selectRange(el, s, e) {
+  const { nodes } = readRich(el);
+  const at = (p) => {
+    const n = nodes.find((n) => n.len && p >= n.start && p <= n.start + n.len) ?? nodes.find((n) => n.len && n.start >= p);
+    return n ? [n.node, Math.min(n.len, Math.max(0, p - n.start))] : [el, 0];
+  };
+  const r = document.createRange();
+  r.setStart(...at(s));
+  r.setEnd(...at(e));
+  getSelection().removeAllRanges();
+  getSelection().addRange(r);
+}
+
+// Zuletzt markierter Bereich beim Bearbeiten: so wirkt auch der Farbwähler (der den Fokus nimmt) nur darauf.
+let lastEditRange = null;
+document.addEventListener("selectionchange", () => {
+  const el = document.activeElement;
+  if (el?.classList?.contains("text") && el.isContentEditable) {
+    const r = editSelection(el);
+    lastEditRange = r ? { id: el.dataset.id, s: r[0], e: r[1] } : null;
+  }
+});
+
+function editedRange(o) {
+  const el = elOf(o);
+  if (el?.isContentEditable) {
+    const r = editSelection(el);
+    return r ? { el, s: r[0], e: r[1] } : null;
+  }
+  return lastEditRange?.id === o.id ? { el: null, s: lastEditRange.s, e: lastEditRange.e } : null;
+}
+
+// Bearbeiteten Inhalt ins Modell übernehmen, ohne die Bearbeitung zu beenden.
+function syncEditing(el) {
+  const o = byId.get(el.dataset.id);
+  if (!o) return false;
+  const { text, styles } = readRich(el);
+  const copy = { ...o, text };
+  packSpans(copy, styles);
+  if (JSON.stringify([text, copy.spans]) === JSON.stringify([o.text, o.spans])) return false;
+  checkpoint();
+  o.text = text;
+  if (copy.spans) o.spans = copy.spans;
+  else delete o.spans;
+  return true;
+}
+
+// Format nur für einen Bereich: beim Bearbeiten erst den Stand übernehmen, danach neu zeichnen und die
+// Auswahl wiederherstellen; sonst direkt am Modell.
+function formatRange(o, r, change, undoStep = true) {
+  if (r.el) syncEditing(r.el);
+  if (undoStep) checkpoint();
+  const styles = charStyles(o);
+  change(styles.slice(r.s, r.e), baseStyle(o)).forEach((st, k) => (styles[r.s + k] = st));
+  packSpans(o, styles);
+  if (r.el) {
+    renderText(o, r.el);
+    selectRange(r.el, r.s, r.e);
+  } else updateEl(o);
+}
+
 // Der neue Zustand richtet sich nach dem zuletzt gewählten Text und gilt dann für alle.
 function toggleBold() {
   if (selected?.type !== "text") return;
+  const r = editedRange(selected);
+  if (r)
+    return formatRange(selected, r, (sts, base) => {
+      const on = !sts.every((st) => st.b ?? base.b);
+      return sts.map((st) => ({ ...st, b: on }));
+    });
   const weight = textWeight(selected) >= 600 ? 400 : 700;
   format((o) => (o.weight = weight), isText);
 }
 
 function toggleItalic() {
   if (selected?.type !== "text") return;
+  const r = editedRange(selected);
+  if (r)
+    return formatRange(selected, r, (sts, base) => {
+      const on = !sts.every((st) => st.i ?? base.i);
+      return sts.map((st) => ({ ...st, i: on }));
+    });
   const italic = !textItalic(selected);
   format((o) => (o.italic = italic), isText);
 }
@@ -1521,10 +1735,21 @@ function toggleBullets() {
   if (selected?.type !== "text") return;
   const on = !isBulleted(selected);
   format((o) => {
-    o.text = o.text
-      .split("\n")
-      .map((l) => (!l.trim() ? l : on ? (/^ *• /.test(l) ? l : `• ${l}`) : l.replace(/^ *• /, "")))
-      .join("\n");
+    const lines = o.text.split("\n");
+    const next = lines.map((l) => (!l.trim() ? l : on ? (/^ *• /.test(l) ? l : `• ${l}`) : l.replace(/^ *• /, "")));
+    // Formatabschnitte mitschieben: jede Zeile ändert sich nur am Anfang.
+    const st = charStyles(o);
+    const out = [];
+    let pos = 0;
+    lines.forEach((l, k) => {
+      const ls = st.slice(pos, pos + l.length);
+      const d = next[k].length - l.length;
+      out.push(...(d >= 0 ? [...Array(d).fill({}), ...ls] : ls.slice(-d)));
+      if (k < lines.length - 1) out.push({});
+      pos += l.length + 1;
+    });
+    o.text = next.join("\n");
+    packSpans(o, out);
   }, isText);
 }
 
@@ -1536,23 +1761,20 @@ function cycleAlign() {
 
 function startEditing(o) {
   const el = elOf(o);
-  el.querySelector(".handle")?.remove(); // sonst landet der Anfasser im Text
-  el.contentEditable = "plaintext-only";
+  el.querySelectorAll(".handle, .rot-handle").forEach((h) => h.remove()); // sonst landen die Anfasser im Text
+  lastEditRange = null;
+  // „true“ statt „plaintext-only“: markierte Wörter lassen sich einzeln formatieren (Strg+B/I, Farbe).
+  el.contentEditable = "true";
   el.focus();
   document.getSelection().selectAllChildren(el);
 }
 
 function finishEditing(el) {
   if (!el.isContentEditable) return;
-  el.contentEditable = "false";
   const o = byId.get(el.dataset.id);
-  if (!o) return;
-  const text = el.innerText.replace(/​/g, ""); // Platzhalter leerer Aufzählungszeilen
-  if (o.text !== text) {
-    checkpoint();
-    o.text = text;
-  }
-  updateEl(o, el);
+  if (o) syncEditing(el); // Text und Formatabschnitte übernehmen (Platzhalter leerer Zeilen fallen weg)
+  el.contentEditable = "false";
+  if (o) updateEl(o, el);
 }
 
 function isEditing() {
@@ -3410,7 +3632,7 @@ window.addEventListener("blur", closeMenu);
 
 // Das Browser-Menü (Neu laden, Untersuchen …) gibt es in der App nicht; in Eingabefeldern bleibt es.
 document.addEventListener("contextmenu", (e) => {
-  if (!e.target.closest("input, textarea, [contenteditable='plaintext-only']")) e.preventDefault();
+  if (!e.target.closest("input, textarea, [contenteditable='plaintext-only'], [contenteditable='true']")) e.preventDefault();
 });
 
 // ---------- Tasten und Knöpfe ----------

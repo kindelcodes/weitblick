@@ -150,7 +150,7 @@ body.insertbar-open {
   cursor: nwse-resize;
 }
 
-.obj.text[contenteditable="plaintext-only"] {
+.obj.text[contenteditable="true"] {
   outline: calc(2px * var(--inv, 1)) dashed var(--orange);
   cursor: text;
   user-select: text;

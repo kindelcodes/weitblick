@@ -50,7 +50,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Zum Rahmen hinzufügen / lösen | Rahmen und Objekte gemeinsam auswählen → „▣+ Rahmen“ (der Rahmen wächst mit); Objekt auswählen → „▣− Rahmen“. Beim gewählten Rahmen ist sein Inhalt gestrichelt markiert |
 | Ecken abrunden | Regler ◜ in der Formatleiste (Rechtecke, Vielecke, Pfeile, Rahmen, Bilder) |
 | Größe ändern | Anfasser unten rechts, Umschalt hält das Seitenverhältnis |
-| Text bearbeiten | Doppelklick auf den Text, Esc beendet |
+| Text bearbeiten | Doppelklick auf den Text, Esc beendet; dabei markierte Wörter einzeln fett (Strg+B oder B), kursiv (Strg+I oder I) oder farbig (Farbwähler) |
 | Löschen | Entf |
 | Farbe, Schrift, Fett, Kursiv, Ausrichtung | Formatleiste über der Leinwand, sobald etwas ausgewählt ist; Strg+B / Strg+I |
 | Pfadschritt umbenennen | Doppelklick auf den Eintrag in der Pfadliste, Enter übernimmt |

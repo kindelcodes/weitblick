@@ -144,14 +144,33 @@ function txBody(o, ctx, scale) {
   const b = ctx.textWeight(o) >= 600 ? ' b="1"' : "";
   const i = ctx.textItalic(o) ? ' i="1"' : "";
   const algn = { center: "ctr", right: "r" }[o.align] ?? "l";
-  const rPr = `<a:rPr lang="de-DE" sz="${sz}"${b}${i} dirty="0"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${font}"/><a:cs typeface="${font}"/></a:rPr>`;
+  const rPrOf = (r = {}) => {
+    const rb = r.b === undefined ? b : r.b ? ' b="1"' : ' b="0"';
+    const ri = r.i === undefined ? i : r.i ? ' i="1"' : ' i="0"';
+    return `<a:rPr lang="de-DE" sz="${sz}"${rb}${ri} dirty="0"><a:solidFill><a:srgbClr val="${r.c ? hex6(r.c) : color}"/></a:solidFill><a:latin typeface="${font}"/><a:cs typeface="${font}"/></a:rPr>`;
+  };
+  // Formatierte Abschnitte (o.spans) werden eigene Textläufe.
+  const runs = (line, at) => {
+    const cuts = new Set([0, line.length]);
+    for (const r of o.spans ?? []) for (const x of [r.s - at, r.e - at]) if (x > 0 && x < line.length) cuts.add(x);
+    const pts = [...cuts].sort((p, q) => p - q);
+    let xml = "";
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const r = o.spans?.find((r) => r.s <= at + pts[k] && r.e >= at + pts[k + 1]);
+      xml += `<a:r>${rPrOf(r)}<a:t>${esc(line.slice(pts[k], pts[k + 1]))}</a:t></a:r>`;
+    }
+    return xml;
+  };
+  let at = 0;
   const paras = String(o.text ?? "")
     .split("\n")
-    .map((line) =>
-      line
-        ? `<a:p><a:pPr algn="${algn}"/><a:r>${rPr}<a:t>${esc(line)}</a:t></a:r></a:p>`
-        : `<a:p><a:pPr algn="${algn}"/><a:endParaRPr lang="de-DE" sz="${sz}"/></a:p>`,
-    )
+    .map((line) => {
+      const p = line
+        ? `<a:p><a:pPr algn="${algn}"/>${runs(line, at)}</a:p>`
+        : `<a:p><a:pPr algn="${algn}"/><a:endParaRPr lang="de-DE" sz="${sz}"/></a:p>`;
+      at += line.length + 1;
+      return p;
+    })
     .join("");
   return `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody>`;
 }
