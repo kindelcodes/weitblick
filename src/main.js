@@ -1679,6 +1679,9 @@ function hitObject(e) {
   const band = FRAME_GRAB_PX / zoom();
   // Alle Objekte unter dem Zeiger, oberstes zuerst: ein nach vorn geholter Rahmen soll den Inhalt
   // darunter nicht verdecken, also zählt er nur an seiner Kante.
+  // Ein gefüllter Rahmen (z. B. eine Folie aus PowerPoint) ist auch auf seiner freien Fläche greifbar,
+  // sonst bliebe beim Verschieben des Inhalts der leere Folienkasten zurück.
+  let filled = null;
   for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
     const objEl = el.closest?.(".obj");
     if (!objEl || objEl.classList.contains("hidden-frame") || !world.contains(objEl)) continue;
@@ -1687,8 +1690,9 @@ function hitObject(e) {
     if (o.type !== "frame") return o;
     const nearEdge = p.x - o.x < band || o.x + o.w - p.x < band || p.y - o.y < band || o.y + o.h - p.y < band;
     if (nearEdge) return o;
+    if (o.fill && !filled) filled = o;
   }
-  return null;
+  return filled;
 }
 
 // ---------- Zeigergesten: verschieben, Objekt bewegen, Größe ändern ----------
