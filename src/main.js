@@ -3496,6 +3496,8 @@ if (tauri?.event) {
   tauri.event.listen("presenter-ready", sendPresenter);
   tauri.event.listen("presenter-cmd", ({ payload }) => {
     if (!presenting) return;
+    // Wie bei Tasten im Hauptfenster: aus dem leeren Bildschirm führt der nächste Befehl erst zurück.
+    if (blankMode && (payload === "next" || payload === "prev")) return setBlank(null);
     if (payload === "next") goTo(pathIndex + 1);
     else if (payload === "prev") goTo(pathIndex - 1);
     else if (payload === "stop") stopPresentation();
