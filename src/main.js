@@ -318,6 +318,8 @@ function buildWorld() {
   showFileName();
   document.body.style.setProperty("--bg", doc.theme.background);
   applyBackground();
+  updatePathBadges();
+  queueMinimap();
 }
 
 function zoom() {
@@ -347,6 +349,7 @@ function render() {
   updateParallax();
   updateCovers();
   positionContextBar();
+  queueMinimap();
 }
 
 // ---------- Kontextleiste ----------
@@ -534,6 +537,7 @@ function buildPathList() {
     pathList.append(li);
   });
   markActive();
+  updatePathBadges();
 }
 
 function stepLabel(o) {
@@ -1966,7 +1970,7 @@ function handleAt(e) {
 viewport.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1) return;
   // Leisten über der Leinwand bekommen ihre Klicks selbst, sonst würde die Zeigererfassung sie schlucken.
-  if (e.target.closest(".formatbar, .present-controls")) return;
+  if (e.target.closest(".formatbar, .present-controls, .minimap, .tour")) return;
   if (presenting) {
     // Beim Präsentieren wird nichts bearbeitet: ziehen verschiebt, ein Klick fliegt zum Objekt.
     camera.stop();
@@ -1979,6 +1983,17 @@ viewport.addEventListener("pointerdown", (e) => {
   if (isEditing()) document.activeElement.blur();
   camera.stop();
   const start = eventToWorld(e);
+  const badge = e.button === 0 && e.target.closest(".path-badge");
+  if (badge) return togglePathFor(badge.dataset.frame);
+  if (drawingFrame && e.button === 0) {
+    const box = document.createElement("div");
+    box.className = "marquee draw";
+    viewport.append(box);
+    const r = viewport.getBoundingClientRect();
+    gesture = { kind: "draw", start, box, sx: e.clientX - r.left, sy: e.clientY - r.top };
+    viewport.setPointerCapture(e.pointerId);
+    return;
+  }
 
   // Anfasser der Auswahl nach ihrer Lage treffen: oft liegt ein Rahmen darüber (z. B. nach Prezi-Import)
   // und bekäme sonst den Klick – das Ziehen würde dann Text markieren statt die Größe ändern.
@@ -2055,7 +2070,7 @@ viewport.addEventListener("pointermove", (e) => {
     updateEl(gesture.o);
     return;
   }
-  if (gesture.kind === "marquee") {
+  if (gesture.kind === "marquee" || gesture.kind === "draw") {
     const r = viewport.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
@@ -2266,6 +2281,13 @@ const endGesture = (e) => {
   if (moved) checkpoint(g.before);
   else if (g?.drill && !g.live) setSelection([g.drill]);
   updateGeomFields();
+  if (g?.kind === "draw") {
+    g.box.remove();
+    setDrawFrame(false);
+    const b = g.end && { x: Math.min(g.start.x, g.end.x), y: Math.min(g.start.y, g.end.y), w: Math.abs(g.end.x - g.start.x), h: Math.abs(g.end.y - g.start.y) };
+    // Unter 10 px auf dem Bildschirm gilt als Versehen.
+    if (b && Math.max(b.w, b.h) * zoom() > 10) frameFromRect(b);
+  }
   if (g?.kind === "marquee") {
     g.box.remove();
     if (g.end) {
@@ -2676,12 +2698,12 @@ function insertObjects(items, at = null) {
   setSelection(added);
 }
 
-function insertIcon(name) {
+function insertIcon(name, at = null) {
   const s = camera.w * 0.1;
-  insertObjects([{ type: "icon", name, x: -s / 2, y: -s / 2, w: s, h: s, color: doc.theme.accent }]);
+  insertObjects([{ type: "icon", name, x: -s / 2, y: -s / 2, w: s, h: s, color: doc.theme.accent }], at);
 }
 
-function insertDiagram(id) {
+function insertDiagram(id, at = null) {
   const d = DIAGRAMS.find((x) => x.id === id);
   if (!d) return;
   let items = d.build(camera.w / 16, doc.theme);
@@ -2690,7 +2712,7 @@ function insertDiagram(id) {
     const g = `g-${Date.now().toString(36)}`;
     items = items.map((o) => ({ ...o, group: g }));
   }
-  insertObjects(items, freeSpot(items));
+  insertObjects(items, at ?? freeSpot(items));
   const added = [...selection];
   const frame = frameAndAddToPath(added, d.label);
   addSubSteps(added);
@@ -3147,6 +3169,7 @@ function buildSidebar() {
       const preview = shapeSvg(s.id, "currentColor") ?? `<span class="css-shape ${s.id}"></span>`;
       b.innerHTML = `${preview}<span>${s.label}</span>`;
       b.addEventListener("click", () => addObject(s.id));
+      dragToCanvas(b, (at) => addObject(s.id, at));
       grid.append(b);
     }
     shapes.append(h, grid);
@@ -3158,6 +3181,7 @@ function buildSidebar() {
     b.className = "row";
     b.textContent = d.label;
     b.addEventListener("click", () => insertDiagram(d.id));
+    dragToCanvas(b, (at) => insertDiagram(d.id, at));
     diagrams.append(b);
   }
 
@@ -3175,6 +3199,7 @@ function buildSidebar() {
         b.title = n;
         b.innerHTML = iconSvg(n);
         b.addEventListener("click", () => insertIcon(n));
+        dragToCanvas(b, (at) => insertIcon(n, at));
         return b;
       }),
     );
@@ -3593,6 +3618,7 @@ function objectMenu(at) {
     one?.type === "text" && { label: "Text bearbeiten", keys: "Doppelklick", run: () => startEditing(one) },
     "-",
     { label: "Als Pfadschritt anhängen", run: addSelectedToPath },
+    selection.some((o) => o.type !== "frame") && { label: "Rahmen um Auswahl (in den Pfad)", run: frameSelection },
     { label: "Beim Präsentieren einblenden", run: () => addAnimation("fade-in") },
     { label: "Beim Präsentieren ausblenden", run: () => addAnimation("fade-out") },
     one && { label: "Hierher zoomen", run: () => flyToObject(one) },
@@ -3611,6 +3637,7 @@ function canvasMenu(at, lockedHit) {
     "-",
     { label: "Text hier", run: () => addObject("text", at) },
     { label: "Rahmen hier", run: () => addObject("frame", at) },
+    { label: "Rahmen aufziehen", keys: "R", run: () => setDrawFrame(true) },
     { label: "Bild einfügen …", run: chooseImages },
     { label: "Verknüpfte Grafik einfügen … (z. B. Origin)", run: () => insertLinkedGraphic(at) },
     {
@@ -3684,6 +3711,12 @@ document.addEventListener("keydown", (e) => {
     openSearch();
     return;
   }
+  if (e.ctrlKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if (isEditing()) document.activeElement.blur();
+    openPalette();
+    return;
+  }
   if (e.ctrlKey && (e.key === "n" || e.key === "N")) {
     e.preventDefault();
     newDocument();
@@ -3707,6 +3740,8 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  // In Eingabefeldern (Suche, Notizen, Maße …) gehören Buchstaben, Pfeile und Entf dem Feld.
+  if (e.target.closest?.("input, textarea, select") && !/^F\d+$/.test(e.key)) return;
   // Ebenen: Strg+↑/↓ einen Schritt, mit Umschalt ganz nach vorn/hinten.
   if (e.ctrlKey && !presenting && selection.length && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
     e.preventDefault();
@@ -3727,6 +3762,20 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape" && painting) {
     setPainting(false);
+    return;
+  }
+  if (e.key === "Escape" && drawingFrame) {
+    setDrawFrame(false);
+    return;
+  }
+  if (!presenting && !e.ctrlKey && !e.altKey && (e.key === "?" || e.key === "F1")) {
+    e.preventDefault();
+    showShortcuts();
+    return;
+  }
+  if (!presenting && !e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "r") {
+    e.preventDefault();
+    setDrawFrame(!drawingFrame);
     return;
   }
   // Format kopieren/einfügen wie in PowerPoint; preventDefault verhindert das normale Einfügen.
@@ -3826,6 +3875,9 @@ on("btn-italic", toggleItalic);
 on("btn-list", toggleBullets);
 on("btn-align", cycleAlign);
 on("btn-undo", undo);
+on("btn-frame-around", frameSelection);
+on("btn-palette", openPalette);
+on("btn-minimap", toggleMinimap);
 on("btn-redo", redo);
 
 // Vor dem Schließen nachfragen, wenn noch etwas ungespeichert ist.
@@ -4325,6 +4377,428 @@ startEl.querySelector(".start-actions").addEventListener("click", async (e) => {
   if (what === "demo" && (await confirmDiscard())) loadDocument(structuredClone(demo), null);
 });
 
+// ---------- Fotos (Openverse) ----------
+// Frei lizenzierte Bilder suchen; das gewählte wird eingebettet (danach offline) und bekommt
+// einen kleinen Urhebervermerk darunter, mit dem Bild gruppiert.
+
+const photoGrid = sidebar.querySelector(".photo-grid");
+const photoStatus = sidebar.querySelector(".photo-status");
+const photoMore = document.getElementById("photo-more");
+let photoQuery = "";
+let photoPage = 1;
+
+const LICENSES = { cc0: "CC0", pdm: "gemeinfrei" };
+function creditLine(r) {
+  const lic = LICENSES[r.license] ?? `CC ${r.license.toUpperCase()} ${r.license_version ?? ""}`.trim();
+  return `Foto: ${r.title ? `„${r.title}“ ` : ""}${r.creator ? `von ${r.creator} ` : ""}· ${lic} · ${r.source ?? "Openverse"}`;
+}
+
+async function searchPhotos(query, more = false) {
+  photoQuery = query.trim();
+  if (!photoQuery) return;
+  photoPage = more ? photoPage + 1 : 1;
+  if (!more) photoGrid.replaceChildren();
+  photoMore.hidden = true;
+  photoStatus.textContent = "Suche …";
+  try {
+    const res = JSON.parse(await tauri.core.invoke("openverse_search", { query: photoQuery, page: photoPage }));
+    for (const r of res.results) {
+      const b = document.createElement("button");
+      b.title = `${creditLine(r)}\nKlicken: einfügen · Ziehen: an eine Stelle legen`;
+      const img = Object.assign(document.createElement("img"), { src: r.thumbnail, alt: r.title ?? "", loading: "lazy" });
+      b.append(img);
+      b.addEventListener("click", () => insertPhoto(r));
+      dragToCanvas(b, (at) => insertPhoto(r, at));
+      photoGrid.append(b);
+    }
+    photoStatus.textContent = res.result_count ? `${res.result_count} Treffer` : "Nichts gefunden – vielleicht auf Englisch suchen?";
+    photoMore.hidden = photoPage >= Math.min(res.page_count, 20);
+  } catch (err) {
+    photoStatus.textContent = String(err?.message ?? err);
+  }
+}
+
+async function insertPhoto(r, at = null) {
+  photoStatus.textContent = "Lade Bild …";
+  let file;
+  try {
+    file = await tauri.core.invoke("web_image", { url: r.url });
+  } catch {
+    // Manche Quellen liefern das Original nicht aus; dann die Vorschau von Openverse.
+    try {
+      file = await tauri.core.invoke("web_image", { url: r.thumbnail });
+    } catch (err) {
+      photoStatus.textContent = String(err?.message ?? err);
+      return;
+    }
+  }
+  checkpoint();
+  const img = await placeImage(extOf(file.name), file.data, at);
+  const g = `g-${Date.now().toString(36)}`;
+  const size = img.w * 0.022;
+  const credit = { id: newId("t"), type: "text", role: "body", text: creditLine(r), x: img.x, y: img.y + img.h + size * 0.4, w: img.w, h: size * 1.3, size, opacity: 0.7, group: g };
+  img.group = g;
+  doc.objects.push(credit);
+  buildWorld();
+  setSelection([img, credit]);
+  photoStatus.textContent = "Eingefügt – der Urhebervermerk gehört dazu (Lizenz beachten).";
+}
+
+const photoSearch = document.getElementById("photo-search");
+photoSearch.addEventListener("keydown", (e) => e.key === "Enter" && searchPhotos(photoSearch.value));
+photoMore.addEventListener("click", () => searchPhotos(photoQuery, true));
+
+// ---------- Aus der Seitenleiste auf die Leinwand ziehen ----------
+// Eigene Zeigerlogik wie beim Pfad (Tauri fängt HTML-Drag-and-drop ab). Ein Klick fügt wie bisher in der Mitte ein.
+
+let suppressClickUntil = 0;
+sidebar.addEventListener("click", (e) => Date.now() < suppressClickUntil && e.stopPropagation(), true);
+
+function dragToCanvas(el, insert) {
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    let ghost = null;
+    const move = (ev) => {
+      if (!ghost && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 6) return;
+      if (!ghost) {
+        ghost = el.cloneNode(true);
+        ghost.classList.add("drag-ghost");
+        document.body.append(ghost);
+      }
+      ghost.style.left = `${ev.clientX}px`;
+      ghost.style.top = `${ev.clientY}px`;
+    };
+    const up = (ev) => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      if (!ghost) return;
+      ghost.remove();
+      suppressClickUntil = Date.now() + 100;
+      if (!viewport.contains(document.elementFromPoint(ev.clientX, ev.clientY))) return;
+      const r = viewport.getBoundingClientRect();
+      insert(screenToWorld(ev.clientX - r.left, ev.clientY - r.top));
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  });
+}
+
+// ---------- Pfadnummern an den Rahmen ----------
+// Jeder Rahmen zeigt seine Schrittnummer(n); ein Klick darauf nimmt ihn in den Pfad auf oder heraus.
+
+function updatePathBadges() {
+  world.querySelectorAll(".path-badge").forEach((b) => b.remove());
+  for (const o of doc.objects) {
+    if (o.type !== "frame" || o.id === doc.path[0]) continue;
+    const el = elOf(o);
+    if (!el) continue;
+    const nums = doc.path.flatMap((id, i) => (id === o.id ? [i] : []));
+    const b = document.createElement("span");
+    b.className = `path-badge${nums.length ? "" : " off"}`;
+    b.dataset.frame = o.id;
+    b.textContent = nums.length ? nums.join(" · ") : "+";
+    b.title = nums.length ? "Pfadschritt – klicken nimmt den Rahmen aus dem Pfad" : "Nicht im Pfad – klicken hängt den Rahmen an";
+    el.append(b);
+  }
+}
+
+function togglePathFor(id) {
+  checkpoint();
+  if (doc.path.includes(id)) {
+    doc.path = doc.path.filter((p, i) => i === 0 || p !== id);
+    pathIndex = Math.min(pathIndex, doc.path.length - 1);
+    buildPathList();
+  } else addToPath(id);
+}
+
+// ---------- Rahmen um die Auswahl / Rahmen aufziehen ----------
+
+function frameSelection() {
+  const items = selection.filter((o) => o.type !== "frame");
+  if (!items.length) return;
+  checkpoint();
+  setSelection(items);
+  const f = frameAndAddToPath(items, "Neuer Rahmen");
+  setSelection([f]);
+}
+
+let drawingFrame = false;
+function setDrawFrame(on) {
+  drawingFrame = on;
+  viewport.classList.toggle("draw-frame", on);
+  if (on) showToast("Rahmen aufziehen: auf der Leinwand ziehen (Esc bricht ab)");
+}
+
+// Aus einem gezogenen Rechteck einen Rahmen im Seitenverhältnis machen; was ganz darin liegt, gehört dazu.
+function frameFromRect(b) {
+  let w = b.w;
+  let h = b.h;
+  const ratio = aspectRatio();
+  if (w / h < ratio) w = h * ratio;
+  else h = w / ratio;
+  checkpoint();
+  const f = { id: newId("f"), type: "frame", x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2, w, h, title: "Neuer Rahmen" };
+  for (const o of doc.objects) if (o.type !== "frame" && !o.frame && inside(o, f)) o.frame = f.id;
+  doc.objects.splice(1, 0, f);
+  growOverview(f);
+  buildWorld();
+  addToPath(f.id);
+  select(f);
+}
+
+// ---------- Befehlssuche (Strg+K) und Tastenkürzel (?) ----------
+
+function commands() {
+  return [
+    { label: "Neue Präsentation", keys: "Strg+N", run: newDocument },
+    { label: "Öffnen …", keys: "Strg+O", run: openFile },
+    { label: "Speichern", keys: "Strg+S", run: save },
+    { label: "Speichern unter …", keys: "Strg+Umschalt+S", run: saveAs },
+    { label: "Startseite und Vorlagen", run: showStart },
+    { label: "Als Vorlage speichern", run: saveAsTemplate },
+    { label: "PDF exportieren …", run: printDeck },
+    { label: "PowerPoint exportieren (Morph) …", run: () => exportPptx(true) },
+    { label: "PowerPoint exportieren (klassisch) …", run: () => exportPptx(false) },
+    { label: "Präsentieren", keys: "F5", run: () => startPresentation(false) },
+    { label: "Ab aktuellem Schritt präsentieren", keys: "Umschalt+F5", run: () => startPresentation(true) },
+    { label: "Text einfügen", run: () => addObject("text") },
+    { label: "Rahmen einfügen", run: () => addObject("frame") },
+    { label: "Rahmen aufziehen", keys: "R", run: () => setDrawFrame(true) },
+    selection.length && { label: "Rahmen um Auswahl", run: frameSelection },
+    { label: "Bild von der Festplatte einfügen …", run: chooseImages },
+    { label: "Fotos suchen (Openverse)", run: () => (openSidebar("photos"), photoSearch.focus()) },
+    { label: "Symbole", run: () => (openSidebar("icons"), document.getElementById("icon-search").focus()) },
+    { label: "Formen", run: () => openSidebar("shapes") },
+    { label: "Diagramme", run: () => openSidebar("diagrams") },
+    { label: "Stil und Hintergrund", run: () => openSidebar("style") },
+    { label: "Schriften", run: () => openSidebar("fonts") },
+    { label: "Suchen", keys: "Strg+F", run: openSearch },
+    { label: "Rückgängig", keys: "Strg+Z", run: undo },
+    { label: "Wiederholen", keys: "Strg+Y", run: redo },
+    { label: "Alles auswählen", keys: "Strg+A", run: selectAll },
+    { label: "Kopieren", keys: "Strg+C", run: copySelection },
+    { label: "Ausschneiden", keys: "Strg+X", run: cutSelection },
+    { label: "Duplizieren", keys: "Strg+D", run: duplicateSelection },
+    { label: "Löschen", keys: "Entf", run: deleteSelected },
+    { label: "Gruppieren", keys: "Strg+G", run: groupSelection },
+    { label: "Gruppierung aufheben", keys: "Strg+Umschalt+G", run: ungroupSelection },
+    { label: "Format kopieren", keys: "Strg+Umschalt+C", run: copyFormat },
+    { label: "Format einfügen", keys: "Strg+Umschalt+V", run: () => pasteFormat() },
+    { label: "Ganz nach vorn", keys: "Strg+Umschalt+↑", run: () => reorder("front") },
+    { label: "Ganz nach hinten", keys: "Strg+Umschalt+↓", run: () => reorder("back") },
+    { label: "Als Pfadschritt anhängen", run: addSelectedToPath },
+    { label: "Zum Überblick", keys: "Pos1", run: () => goTo(0) },
+    { label: "Raster an/aus", keys: "Strg+#", run: toggleGrid },
+    { label: "Minikarte an/aus", run: toggleMinimap },
+    { label: "Seitenleiste an/aus", run: toggleSidebar },
+    { label: "Tastenkürzel anzeigen", keys: "?", run: showShortcuts },
+    { label: "Einführung zeigen", run: () => showTour(0) },
+    ...(arrangeUnits().length > 1 ? arrangeMenuItems() : []).filter((c) => c.run).map((c) => ({ ...c, label: `Ausrichten: ${c.label}` })),
+    ...SHAPES.map((s) => ({ label: `Form: ${s.label}`, run: () => addObject(s.id) })),
+    ...DIAGRAMS.map((d) => ({ label: `Diagramm: ${d.label}`, run: () => insertDiagram(d.id) })),
+  ].filter((c) => c && c.run);
+}
+
+// Weitere Tastenkürzel, die keine Befehle in der Liste sind.
+const EXTRA_KEYS = [
+  ["Pfeiltasten", "Auswahl verschieben (Umschalt: 10 px) · ohne Auswahl: blättern"],
+  ["Strg/Umschalt+Klick", "Zur Auswahl hinzufügen"],
+  ["Umschalt+Ziehen", "Auswahlrechteck"],
+  ["Alt beim Ziehen", "Ohne Einrasten"],
+  ["Doppelklick", "Text bearbeiten"],
+  ["Strg+B / Strg+I", "Fett / kursiv"],
+  ["Strg+K", "Befehlssuche"],
+  ["Beim Präsentieren: B, W, L", "Schwarz, weiß, Laserpointer"],
+];
+
+function overlay(cls) {
+  const o = document.createElement("div");
+  o.className = `overlay ${cls}`;
+  o.addEventListener("pointerdown", (e) => e.target === o && o.remove());
+  o.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") o.remove();
+  });
+  document.body.append(o);
+  return o;
+}
+
+function openPalette() {
+  if (presenting || document.querySelector(".palette")) return;
+  const all = commands();
+  const o = overlay("palette-overlay");
+  o.innerHTML = `<div class="palette" role="dialog" aria-label="Befehlssuche"><input type="search" placeholder="Was möchtest du tun? (z. B. Kreis, PDF, Rahmen)" /><ul role="listbox"></ul></div>`;
+  const input = o.querySelector("input");
+  const list = o.querySelector("ul");
+  let hits = [];
+  let at = 0;
+  const run = (c) => {
+    o.remove();
+    c.run();
+  };
+  const show = () => {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    hits = all.filter((c) => words.every((w) => c.label.toLowerCase().includes(w))).slice(0, 12);
+    at = Math.min(at, Math.max(0, hits.length - 1));
+    list.replaceChildren(
+      ...hits.map((c, i) => {
+        const li = document.createElement("li");
+        li.className = i === at ? "on" : "";
+        li.innerHTML = `<span></span><kbd></kbd>`;
+        li.firstChild.textContent = c.label;
+        li.lastChild.textContent = c.keys ?? "";
+        li.addEventListener("click", () => run(c));
+        return li;
+      }),
+    );
+  };
+  input.addEventListener("input", () => ((at = 0), show()));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      at = (at + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % Math.max(1, hits.length);
+      show();
+    } else if (e.key === "Enter" && hits[at]) run(hits[at]);
+  });
+  show();
+  input.focus();
+}
+
+function showShortcuts() {
+  if (document.querySelector(".shortcuts")) return;
+  const o = overlay("shortcut-overlay");
+  o.tabIndex = -1;
+  const rows = [...commands().filter((c) => c.keys).map((c) => [c.keys, c.label]), ...EXTRA_KEYS];
+  o.innerHTML = `<div class="shortcuts" role="dialog" aria-label="Tastenkürzel"><h2>Tastenkürzel</h2><dl></dl><p class="note">Strg+K findet jede Funktion. Esc schließt.</p></div>`;
+  o.querySelector("dl").append(
+    ...rows.flatMap(([k, v]) => [Object.assign(document.createElement("dt"), { textContent: k }), Object.assign(document.createElement("dd"), { textContent: v })]),
+  );
+  o.focus();
+}
+
+// ---------- Minikarte ----------
+// Zeigt die ganze Präsentation klein mit dem aktuellen Ausschnitt; Klicken oder Ziehen springt dorthin.
+
+const minimap = document.createElement("canvas");
+minimap.className = "minimap";
+minimap.width = 200;
+minimap.height = 120;
+minimap.title = "Minikarte – klicken oder ziehen springt dorthin";
+viewport.append(minimap);
+let minimapOn = true;
+try {
+  minimapOn = localStorage.getItem("weitblick-minimap") !== "0";
+} catch {
+  // ohne Speicher: an
+}
+minimap.hidden = !minimapOn;
+document.getElementById("btn-minimap").classList.toggle("on", minimapOn);
+let minimapQueued = false;
+let minimapBox = null;
+
+function toggleMinimap() {
+  minimapOn = !minimapOn;
+  minimap.hidden = !minimapOn;
+  document.getElementById("btn-minimap").classList.toggle("on", minimapOn);
+  try {
+    localStorage.setItem("weitblick-minimap", minimapOn ? "1" : "0");
+  } catch {}
+  drawMinimap();
+}
+
+function queueMinimap() {
+  if (!minimapOn || minimapQueued) return;
+  minimapQueued = true;
+  requestAnimationFrame(() => {
+    minimapQueued = false;
+    drawMinimap();
+  });
+}
+
+// shortcut: Kameradrehung wird in der Minikarte nicht gezeigt, nur der Ausschnitt; bei Bedarf als gedrehtes Rechteck zeichnen.
+function drawMinimap() {
+  if (!minimapOn || presenting) return;
+  const ctx = minimap.getContext("2d");
+  const W = minimap.width;
+  const H = minimap.height;
+  const shown = doc.objects.filter((o) => !o.hidden);
+  const ov = byId.get(doc.path[0]);
+  const all = ov ? [ov, ...shown] : shown;
+  if (!all.length) return;
+  const x1 = Math.min(...all.map((o) => o.x));
+  const y1 = Math.min(...all.map((o) => o.y));
+  const x2 = Math.max(...all.map((o) => o.x + o.w));
+  const y2 = Math.max(...all.map((o) => o.y + o.h));
+  const k = Math.min((W - 8) / (x2 - x1), (H - 8) / (y2 - y1));
+  const ox = (W - (x2 - x1) * k) / 2 - x1 * k;
+  const oy = (H - (y2 - y1) * k) / 2 - y1 * k;
+  minimapBox = { k, ox, oy };
+  ctx.fillStyle = doc.theme.background;
+  ctx.fillRect(0, 0, W, H);
+  for (const o of shown) {
+    const r = [ox + o.x * k, oy + o.y * k, Math.max(1, o.w * k), Math.max(1, o.h * k)];
+    if (o.type === "frame") {
+      ctx.strokeStyle = doc.theme.accent2;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(...r);
+    } else {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = o.type === "text" ? o.color || doc.theme.text : o.type === "image" ? "#8a8f98" : o.fill || o.color || doc.theme.accent;
+      ctx.fillRect(...r);
+      ctx.globalAlpha = 1;
+    }
+  }
+  const ch = (camera.w * viewport.clientHeight) / viewport.clientWidth;
+  ctx.strokeStyle = "#f28c38";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ox + (camera.cx - camera.w / 2) * k, oy + (camera.cy - ch / 2) * k, camera.w * k, ch * k);
+}
+
+function minimapJump(e) {
+  if (!minimapBox) return;
+  const r = minimap.getBoundingClientRect();
+  const { k, ox, oy } = minimapBox;
+  camera.stop();
+  camera.set({ w: camera.w, cx: ((e.clientX - r.left) * (minimap.width / r.width) - ox) / k, cy: ((e.clientY - r.top) * (minimap.height / r.height) - oy) / k });
+}
+minimap.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  minimap.setPointerCapture(e.pointerId);
+  minimapJump(e);
+});
+minimap.addEventListener("pointermove", (e) => minimap.hasPointerCapture(e.pointerId) && minimapJump(e));
+minimap.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+
+// ---------- Einführung beim ersten Start ----------
+
+const TOUR = [
+  "Mausrad zoomt, Ziehen auf freier Fläche verschiebt die Ansicht. Die Minikarte unten rechts zeigt, wo du bist.",
+  "Rahmen sind die Stationen deiner Präsentation. Taste R drücken und ziehen zeichnet einen Rahmen – er kommt gleich in den Pfad.",
+  "Formen, Symbole und Fotos (◫ Einfügen) ziehst du aus der Seitenleiste direkt an ihren Platz.",
+  "Die Nummer an einem Rahmen ist sein Pfadschritt. Ein Klick darauf nimmt ihn in den Pfad auf oder heraus.",
+  "Strg+K findet jede Funktion, ? zeigt alle Tastenkürzel. Mit F5 geht's los. Viel Spaß!",
+];
+
+function showTour(i) {
+  document.querySelector(".tour")?.remove();
+  if (i >= TOUR.length) {
+    try {
+      localStorage.setItem("weitblick-tour", "done");
+    } catch {}
+    return;
+  }
+  const card = document.createElement("div");
+  card.className = "tour";
+  card.setAttribute("role", "status");
+  card.innerHTML = `<span class="tour-step"></span><p></p><div><button class="tour-skip">Überspringen</button><button class="tour-next primary"></button></div>`;
+  card.querySelector(".tour-step").textContent = `Tipp ${i + 1} von ${TOUR.length}`;
+  card.querySelector("p").textContent = TOUR[i];
+  card.querySelector(".tour-next").textContent = i === TOUR.length - 1 ? "Fertig" : "Weiter";
+  card.querySelector(".tour-next").addEventListener("click", () => showTour(i + 1));
+  card.querySelector(".tour-skip").addEventListener("click", () => showTour(TOUR.length));
+  viewport.append(card);
+}
+
 // ---------- Start ----------
 
 doc.fonts ??= [];
@@ -4337,6 +4811,9 @@ buildPathList();
 updateToolbar();
 markSaved();
 camera.set(frameState(doc.path[0]));
+try {
+  if (localStorage.getItem("weitblick-tour") !== "done") showTour(0);
+} catch {}
 
 // Per Doppelklick auf eine .weitblick-Datei gestartet? Dann gleich diese öffnen, sonst die Startseite zeigen.
 tauri?.core

@@ -1846,3 +1846,265 @@ body.laser * {
   box-shadow: 0 0 10px 4px rgba(255, 40, 40, 0.6);
   pointer-events: none;
 }
+
+/* ---------- 1.0: Fotos, Ziehen, Pfadnummern, Rahmen aufziehen, Befehlssuche, Minikarte, Einführung ---------- */
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.photo-grid button {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background: var(--hover);
+  cursor: grab;
+}
+
+.photo-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#photo-search {
+  width: 100%;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  padding: 4px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.85;
+  background: var(--panel);
+  border: 2px solid var(--orange);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.drag-ghost img,
+.drag-ghost svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.path-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) scale(var(--inv, 1));
+  transform-origin: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: var(--teal);
+  color: #fff;
+  font: 600 13px "Segoe UI", system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.path-badge.off {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px dashed var(--muted);
+}
+
+.path-badge:hover {
+  background: var(--orange);
+  color: #fff;
+}
+
+body.presenting .path-badge,
+#print-deck .path-badge,
+.path-preview .path-badge {
+  display: none;
+}
+
+.viewport.draw-frame,
+.viewport.draw-frame .obj {
+  cursor: crosshair;
+}
+
+.marquee.draw {
+  border: 2px solid var(--frame);
+  background: rgba(111, 179, 170, 0.12);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.palette,
+.shortcuts {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--panel);
+  color: var(--panel-text);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.palette input {
+  width: 100%;
+  font: inherit;
+  font-size: 17px;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  outline: none;
+  background: transparent;
+}
+
+.palette ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.palette li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.palette li.on,
+.palette li:hover {
+  background: var(--active-bg);
+}
+
+.palette kbd,
+.shortcuts dt {
+  color: var(--muted);
+  font: 12px "Segoe UI", system-ui, sans-serif;
+}
+
+.shortcuts {
+  padding: 18px 22px;
+  max-height: 76vh;
+  overflow-y: auto;
+}
+
+.shortcuts h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.shortcuts dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 18px;
+  margin: 0;
+}
+
+.shortcuts dt {
+  font-weight: 600;
+}
+
+.shortcuts dd {
+  margin: 0;
+}
+
+.minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  width: 200px;
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.minimap[hidden],
+body.presenting .minimap,
+body.presenting .tour {
+  display: none;
+}
+
+.tour {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 8;
+  width: 320px;
+  padding: 14px 16px;
+  background: var(--panel);
+  color: var(--panel-text);
+  border: 2px solid var(--orange);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.tour-step {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tour p {
+  margin: 6px 0 12px;
+  line-height: 1.4;
+}
+
+.tour div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tour button {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.tour .primary {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+
+.navbar #btn-palette {
+  width: auto;
+  padding: 0 10px;
+  font-size: 14px;
+  white-space: nowrap;
+}

@@ -31,6 +31,15 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Format übertragen | Pinsel 🖌 in der Formatleiste, dann das Ziel anklicken (Esc bricht ab); oder Strg+Umschalt+C / Strg+Umschalt+V; gleicher Objekttyp: alle Formate, sonst die Farbe |
 | Suchen | Strg+F: Texte und Rahmentitel finden, Enter springt zum nächsten Treffer (Umschalt+Enter zurück) |
 | Überblick | Pos1 |
+| Befehlssuche | Strg+K (oder „⌕ Befehle“ unten): tippen, was du tun willst – z. B. „Kreis“, „PDF“, „Rahmen“ – und Enter |
+| Alle Tastenkürzel | ? oder F1 |
+| Fotos | Seitenleiste „Fotos“: frei lizenzierte Bilder über Openverse suchen (Internet nötig, ohne Konto). Das Bild wird eingebettet und bekommt einen kleinen Urhebervermerk darunter (mit dem Bild gruppiert); die Lizenz steht im Vermerk |
+| Aus der Seitenleiste ziehen | Formen, Symbole, Diagramme und Fotos lassen sich direkt an die gewünschte Stelle auf der Leinwand ziehen; ein Klick fügt sie wie bisher in der Mitte ein |
+| Pfadnummern | Jeder Rahmen zeigt oben links seine Schrittnummer; ein Klick darauf nimmt ihn aus dem Pfad, bei „+“ hängt ein Klick ihn an |
+| Rahmen aufziehen | Taste R, dann auf der Leinwand ein Rechteck ziehen: ein Rahmen im Seitenverhältnis, mit dem, was ganz darin liegt, und gleich im Pfad (Esc bricht ab) |
+| Rahmen um Auswahl | Objekte auswählen → „▭ Rahmen drum“ (oder Rechtsklick): ein passender Rahmen darum, als neuer Pfadschritt |
+| Minikarte | unten rechts: die ganze Leinwand mit dem aktuellen Ausschnitt; Klicken oder Ziehen springt dorthin; Knopf ▧ blendet sie aus |
+| Einführung | beim ersten Start fünf kurze Tipps; später über Strg+K → „Einführung zeigen“ |
 | Zu einem Rahmen fliegen | Doppelklick in den Rahmen |
 | Objekt auswählen / bewegen | anklicken und ziehen (Rahmen an ihrer Kante) |
 | Mehrere auswählen | Strg+Klick oder Umschalt+Klick, Strg- oder Umschalt+Ziehen auf leerer Fläche (Auswahlrechteck), Strg+A; danach Strg+G gruppiert |
@@ -41,7 +50,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Hilfslinien | beim Verschieben rasten Kanten und Mitten an anderen Objekten ein (orange Linie), in einer Reihe auch auf gleiche Abstände (grüne Abstandsmarken mit dem Abstand in Pixeln); beim Größe-Ändern rasten Kanten und gleiche Breite/Höhe ein; Alt beim Ziehen: frei |
 | Maße genau eingeben | Formatleiste „⇲ Maße“: Breite, Höhe, X, Y, Drehung, 🔗 hält das Seitenverhältnis; bei mehreren Objekten gelten Breite, Höhe und Drehung für jedes |
 | Ausrichten, verteilen, angleichen | mehrere Objekte auswählen → „⊞ Ausrichten“ oder Rechtsklick: links/mittig/rechts, oben/mittig/unten, gleichmäßig verteilen, gleiche Breite/Höhe/Größe wie das zuerst gewählte Objekt |
-| Vorlagen | Startseite: 8 Vorlagen (Vortrag, Training & Sport, Wissenschaft, Zeitstrahl, Mindmap, Workshop, Projektbericht, Idee & Pitch) mit Stil, Rahmen, Pfad und Platzhaltertexten; „Export ▾“ → „Als Vorlage speichern“ macht die aktuelle Präsentation zur eigenen Vorlage |
+| Vorlagen | Startseite: 14 Vorlagen (Vortrag, Training & Sport, Wissenschaft, Zeitstrahl, Mindmap, Workshop, Projektbericht, Idee & Pitch, Über mich, Unterrichtsstunde, Forschungs-Poster, Vergleich A gegen B, Jahresrückblick, Quiz mit Antworten zum Einblenden) mit Stil, Rahmen, Pfad und Platzhaltertexten; „Export ▾“ → „Als Vorlage speichern“ macht die aktuelle Präsentation zur eigenen Vorlage |
 | Raster | Knopf # unten oder Strg+#: Objekte rasten am Raster ein, das Raster wird als Linien angezeigt |
 | Rechtsklick | auf ein Objekt: Kopieren, Anordnen, Rahmen, Pfad, Animation, Löschen; auf die freie Leinwand: Einfügen, Text/Rahmen/Form hier, Alles auswählen, Stil |
 | Gruppieren / auflösen | Strg+G / Strg+Umschalt+G oder Rechtsklick; ein Klick wählt dann die ganze Gruppe, der orange Anfasser am gestrichelten Kasten skaliert sie gemeinsam; ein zweiter Klick wählt nur das angeklickte Objekt darin (z. B. um einen Text in der Größe zu ändern) |

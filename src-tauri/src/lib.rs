@@ -182,6 +182,46 @@ async fn google_font(app: tauri::AppHandle, family: String) -> Result<Vec<FontFa
     Ok(faces)
 }
 
+// Bildersuche bei Openverse (frei lizenzierte Bilder, ohne Schlüssel). Liefert die Antwort als JSON-Text.
+#[tauri::command]
+async fn openverse_search(query: String, page: u32) -> Result<String, String> {
+    ureq::get("https://api.openverse.org/v1/images/")
+        .set("User-Agent", "Weitblick")
+        .query("q", query.trim())
+        .query("page", &page.clamp(1, 20).to_string())
+        .query("page_size", "20")
+        .call()
+        .map_err(|e| format!("Openverse ist nicht erreichbar ({e}). Besteht eine Internetverbindung?"))?
+        .into_string()
+        .map_err(|e| e.to_string())
+}
+
+const MAX_WEB_IMAGE: u64 = 30 * 1024 * 1024;
+
+// Lädt ein Bild aus dem Netz (http/https, höchstens 30 MB), damit es eingebettet werden kann.
+// name ist „bild.<endung>“ nach dem Inhaltstyp.
+#[tauri::command]
+async fn web_image(url: String) -> Result<MediaFile, String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Ungültige Adresse.".into());
+    }
+    let resp = ureq::get(&url).set("User-Agent", "Weitblick").call().map_err(|e| format!("Bild konnte nicht geladen werden: {e}"))?;
+    let ext = match resp.content_type() {
+        "image/jpeg" | "image/jpg" => "jpg",
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
+        other => return Err(format!("Kein unterstütztes Bild ({other}).")),
+    };
+    let mut bytes = Vec::new();
+    resp.into_reader().take(MAX_WEB_IMAGE + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > MAX_WEB_IMAGE {
+        return Err("Das Bild ist größer als 30 MB.".into());
+    }
+    Ok(MediaFile { name: format!("bild.{ext}"), data: STANDARD.encode(bytes) })
+}
+
 // Ein Eintrag in einem ZIP-Paket (z. B. PowerPoint): Text für XML-Teile, sonst Base64.
 #[derive(Serialize, Deserialize)]
 struct ZipEntry {
@@ -554,6 +594,8 @@ pub fn run() {
             startup_file,
             system_fonts,
             google_font,
+            openverse_search,
+            web_image,
             load_style_kits,
             save_style_kits,
             load_recent,

@@ -96,6 +96,7 @@
         </div>
         <div class="fb-group" data-group="present">
           <button id="btn-add-to-path" data-needs="any" title="Als Schritt an den Pfad anhängen">+ Pfad</button>
+          <button id="btn-frame-around" data-needs="any" title="Rahmen um die Auswahl legen und an den Pfad anhängen">▭ Rahmen drum</button>
           <button id="btn-fade-in" data-needs="any" title="Animationsschritt: beim Präsentieren einblenden (nach dem aktuellen Schritt)">✦ Ein</button>
           <button id="btn-fade-out" data-needs="any" title="Animationsschritt: beim Präsentieren ausblenden (nach dem aktuellen Schritt)">✧ Aus</button>
         </div>
@@ -127,6 +128,7 @@
         <button data-tab="style">Stil</button>
         <button data-tab="shapes">Formen</button>
         <button data-tab="icons">Symbole</button>
+        <button data-tab="photos">Fotos</button>
         <button data-tab="diagrams">Diagramme</button>
         <button data-tab="fonts">Schriften</button>
       </div>
@@ -192,6 +194,13 @@
         <div class="icon-grid"></div>
         <p class="note">Symbole: Lucide (ISC-Lizenz)</p>
       </div>
+      <div data-panel="photos">
+        <input id="photo-search" type="search" placeholder="Fotos suchen + Enter (englisch findet mehr)" />
+        <div class="photo-status note"></div>
+        <div class="photo-grid"></div>
+        <button class="row" id="photo-more" hidden>Mehr laden</button>
+        <p class="note">Frei lizenzierte Bilder über Openverse (Internet nötig). Das Bild wird eingebettet, ein Urhebervermerk kommt automatisch darunter. Bitte die Lizenz beachten (z. B. NC = nicht kommerziell).</p>
+      </div>
       <div data-panel="diagrams" class="row-list">
         <p class="note">Fügt eine fertige Anordnung aus Formen und Texten ein. Danach ist alles einzeln bearbeitbar.</p>
       </div>
@@ -220,6 +229,8 @@
       <button id="btn-zoom-in" title="Hineinzoomen">+</button>
       <span class="sep"></span>
       <button id="btn-grid" title="Raster: Objekte rasten beim Verschieben am Raster ein (Strg+#). Alt beim Ziehen: frei verschieben">#</button>
+      <button id="btn-minimap" title="Minikarte an/aus">▧</button>
+      <button id="btn-palette" title="Jede Funktion finden (Strg+K) – alle Tastenkürzel: ?">⌕ Befehle</button>
     </nav>
 
     <section id="start" class="start" hidden aria-label="Startseite">

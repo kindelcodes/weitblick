@@ -207,4 +207,109 @@ export const TEMPLATES = [
       return finish("Idee & Pitch", th, [big, ...parts, ask], [big, ...parts, ask]);
     },
   },
+  {
+    id: "vorstellung",
+    name: "Über mich",
+    note: "Vorstellung oder Lebenslauf: dein Name in der Mitte, vier Themen ringsum",
+    theme: "papier",
+    build(th) {
+      const k = kit(th);
+      const disc = k.shape("ellipse", -650, -650, 1300, 1300, th.accent);
+      const me = { frame: k.frame(-800, -450, 1600, 900, "Ich"), items: [] };
+      me.items.push(me.frame, k.icon("user-round", -110, -380, 220, th.background), k.text(-560, -110, 1120, 200, "Dein Name", 140, "title", { color: th.background, align: "center" }), k.text(-560, 120, 1120, 100, "Beruf · Ort", 56, "subtitle", { color: th.background, align: "center" }));
+      const topics = [["Woher ich komme", "map-pin", -2900, -1500], ["Stationen", "briefcase", 1300, -1500], ["Was ich kann", "star", -2900, 650], ["Kontakt", "mail", 1300, 650]];
+      const parts = topics.map(([n, ic, x, y]) => slide(k, th, x, y, n, PH, ic, 0.85));
+      return finish("Über mich", th, [me, ...parts], [me, ...parts], [disc]);
+    },
+  },
+  {
+    id: "unterricht",
+    name: "Unterrichtsstunde",
+    note: "Eine Treppe: Einstieg, Erarbeitung, Sicherung, Hausaufgabe",
+    theme: "klar",
+    build(th) {
+      const k = kit(th);
+      const steps = [["Einstieg", "Frage oder Bild, das neugierig macht.", "sparkles"], ["Erarbeitung", "Aufgabe · Material · Sozialform", "book-open"], ["Sicherung", "Was haben wir gelernt?", "circle-check"], ["Hausaufgabe", "Bis wann, wo abgeben?", "notebook-pen"]];
+      const parts = steps.map(([n, body, ic], i) => slide(k, th, -3200 + i * 1700, 900 - i * 700, n, body, ic, 0.9));
+      const stairs = parts.map((p) => k.shape("rect", p.frame.x, p.frame.y + p.frame.h + 40, p.frame.w, 2600 - (p.frame.y + p.frame.h + 40), th.accent2, { fillOpacity: 0.12 }));
+      const titleF = { frame: k.frame(-3200, -2400, 3200, 1800, "Thema"), items: [] };
+      titleF.items.push(titleF.frame, k.text(-3000, -1900, 2800, 300, "Thema der Stunde", 220, "title", { color: th.accent }), k.text(-3000, -1500, 2800, 140, "Klasse · Fach · Datum", 90, "subtitle"));
+      return finish("Unterrichtsstunde", th, [titleF, ...parts], [titleF, ...parts], stairs);
+    },
+  },
+  {
+    id: "poster",
+    name: "Forschungs-Poster",
+    note: "Ein großes Poster als Überblick, die Kamera zoomt in jedes Feld",
+    theme: "ozean",
+    build(th) {
+      const k = kit(th);
+      const sheet = k.shape("rounded", -2500, -1600, 5000, 3200, th.text, { fillOpacity: 0.06, radius: 2 });
+      const head = { frame: k.frame(-2400, -1550, 4800, 700, "Titel"), items: [] };
+      head.items.push(head.frame, k.text(-2300, -1450, 4600, 300, "Titel des Posters", 230, "title", { color: th.accent, align: "center" }), k.text(-2300, -1100, 4600, 150, "Autorinnen und Autoren · Institut", 90, "subtitle", { align: "center" }));
+      const cells = [["Hintergrund", "lightbulb"], ["Methode", "flask-conical"], ["Ergebnis", "chart-line"], ["Abbildung", "image"], ["Fazit", "circle-check"], ["Quellen", "book-open"]];
+      const parts = cells.map(([n, ic], i) => slide(k, th, -2400 + (i % 3) * 1630, -750 + Math.floor(i / 3) * 1150, n, PH, ic, 0.95));
+      return finish("Forschungs-Poster", th, [head, ...parts], [head, ...parts], [sheet]);
+    },
+  },
+  {
+    id: "vergleich",
+    name: "Vergleich A gegen B",
+    note: "Zwei Seiten, drei Kriterien, am Ende das Urteil",
+    theme: "nacht",
+    build(th) {
+      const k = kit(th);
+      const left = k.shape("rounded", -3400, -1900, 3300, 3800, th.accent, { fillOpacity: 0.15, radius: 4 });
+      const right = k.shape("rounded", 100, -1900, 3300, 3800, th.accent2, { fillOpacity: 0.15, radius: 4 });
+      const vs = k.shape("ellipse", -350, -350, 700, 700, th.text);
+      const vsText = k.text(-300, -110, 600, 220, "vs.", 180, "title", { color: th.background, align: "center" });
+      const titleF = { frame: k.frame(-3500, -2500, 7000, 3940, "Vergleich"), items: [] };
+      titleF.items.push(titleF.frame, k.text(-3300, -1700, 3100, 300, "Option A", 260, "title", { color: th.accent, align: "center" }), k.text(200, -1700, 3100, 300, "Option B", 260, "title", { color: th.accent2, align: "center" }));
+      const crit = ["Kosten", "Aufwand", "Wirkung"];
+      const parts = crit.flatMap((c, i) => [slide(k, th, -3200, -1200 + i * 1000, `A: ${c}`, "Stichworte", null, 0.55), slide(k, th, 300, -1200 + i * 1000, `B: ${c}`, "Stichworte", null, 0.55)]);
+      const verdict = slide(k, th, -800, 2200, "Unser Urteil", "Darum entscheiden wir uns für …", "scale");
+      return finish("Vergleich A gegen B", th, [titleF, ...parts, verdict], [titleF, ...parts, verdict], [left, right, vs, vsText]);
+    },
+  },
+  {
+    id: "jahr",
+    name: "Jahresrückblick",
+    note: "Vier Quartale mit Höhepunkten, dazu Zahlen und ein Ausblick",
+    theme: "abendrot",
+    build(th) {
+      const k = kit(th);
+      const year = new Date().getFullYear();
+      const titleF = { frame: k.frame(-1600, -2300, 3200, 1800, "Titel"), items: [] };
+      titleF.items.push(titleF.frame, k.text(-1400, -2050, 2800, 560, String(year), 440, "title", { color: th.accent, align: "center" }), k.text(-1400, -1400, 2800, 170, "Unser Jahr im Rückblick", 120, "subtitle", { align: "center" }));
+      const q = ["Januar – März", "April – Juni", "Juli – September", "Oktober – Dezember"].map((n, i) => slide(k, th, -3400 + i * 1720, -200, n, "Der Höhepunkt des Quartals.", ["snowflake", "flower", "sun", "leaf"][i], 0.95));
+      const nums = slide(k, th, -2000, 900, "In Zahlen", "123 Kunden · 45 Projekte · 6 neue Kolleginnen", "chart-column", 1);
+      const next = slide(k, th, 300, 900, `Ausblick ${year + 1}`, "Was wir uns vornehmen.", "telescope", 1);
+      return finish("Jahresrückblick", th, [titleF, ...q, nums, next], [titleF, ...q, nums, next]);
+    },
+  },
+  {
+    id: "quiz",
+    name: "Quiz",
+    note: "Fragen mit Antworten, die erst beim nächsten Klick erscheinen",
+    theme: "technik",
+    build(th) {
+      const k = kit(th);
+      const titleF = { frame: k.frame(-800, -1700, 1600, 900, "Quiz"), items: [] };
+      titleF.items.push(titleF.frame, k.icon("circle-question-mark", -150, -1620, 300), k.text(-700, -1250, 1400, 220, "Das große Quiz", 150, "title", { color: th.accent, align: "center" }));
+      const answers = [];
+      const parts = [0, 1, 2, 3].map((i) => {
+        const s = slide(k, th, -1700 + (i % 2) * 1800, -500 + Math.floor(i / 2) * 1100, `Frage ${i + 1}`, "Wie lautet die Frage?", null, 0.95);
+        const a = k.shape("rounded", s.frame.x + 110, s.frame.y + 560, 1300, 220, th.accent2, { radius: 30 });
+        const t = k.text(s.frame.x + 150, s.frame.y + 600, 1220, 140, "Antwort: …", 70, "subtitle", { color: th.background, group: `g-${i}` });
+        a.group = `g-${i}`;
+        s.items.push(a, t);
+        answers.push([s.frame.id, [a.id, t.id]]);
+        return s;
+      });
+      const d = finish("Quiz", th, [titleF, ...parts], [titleF, ...parts]);
+      // Nach jeder Frage ein Einblende-Schritt für die Antwort.
+      for (const [frameId, targets] of answers) d.path.splice(d.path.indexOf(frameId) + 1, 0, { type: "fade-in", targets });
+      return d;
+    },
+  },
 ].map((t) => ({ ...t, doc: () => t.build(theme(t.theme)) }));
