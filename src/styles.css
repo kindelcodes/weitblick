@@ -1750,3 +1750,16 @@ body.painting .obj {
   color: var(--muted);
   cursor: pointer;
 }
+
+/* Übergang des Pfadschritts, über den Notizen */
+#step-transition {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+}

@@ -289,8 +289,12 @@ export async function buildPptx(ctx) {
       const file = await imageMedia(bg);
       bgXml = `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="${rid(file)}"/><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
     }
+    // Übergang des Schritts: Überblenden → PowerPoint-Verblassen, Direkt → keiner, sonst Morph (falls gewählt).
+    const kind = steps[si].transition;
     const transition =
-      morph && si > 0
+      si > 0 && kind === "fade"
+        ? '<p:transition spd="med"><p:fade/></p:transition>'
+        : morph && si > 0 && kind !== "cut"
         ? '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main" Requires="p159"><p:transition spd="slow"><p159:morph option="byObject"/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>'
         : "";
     // Sprechernotizen: eigene Notizseite, auf die die Folie verweist.

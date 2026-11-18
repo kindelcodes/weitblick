@@ -662,8 +662,41 @@ function markActive() {
   [...pathList.children].forEach((li, i) => li.classList.toggle("active", i === pathIndex));
   if (document.activeElement !== notesBox) notesBox.value = noteHolder(pathIndex)?.notes ?? "";
   notesBox.disabled = !doc.path.length;
+  // Animationsschritte bewegen die Kamera nicht, also gibt es dort keinen Übergang.
+  transitionSelect.value = noteHolder(pathIndex)?.transition ?? "";
+  transitionSelect.disabled = !doc.path.length || isAnim(doc.path[pathIndex]);
   sendPresenter();
 }
+
+// ---------- Übergänge ----------
+// „fade“: Leinwand ausblenden, Kamera umsetzen, einblenden; „cut“: sofort umsetzen; sonst fliegen.
+const FADE_MS = 250;
+let fadeTimer = 0;
+function moveCamera(target, kind) {
+  clearTimeout(fadeTimer);
+  const layers = [world, bgLayer];
+  layers.forEach((el) => (el.style.opacity = ""));
+  if (kind === "cut" || kind === "fade") camera.stop();
+  if (kind === "cut") return camera.set(target);
+  if (kind !== "fade") return camera.flyTo(target);
+  layers.forEach((el) => {
+    el.style.transition = `opacity ${FADE_MS}ms`;
+    el.style.opacity = "0";
+  });
+  fadeTimer = setTimeout(() => {
+    camera.set(target);
+    layers.forEach((el) => (el.style.opacity = ""));
+  }, FADE_MS);
+}
+
+const transitionSelect = document.getElementById("step-transition");
+transitionSelect.addEventListener("change", () => {
+  const h = noteHolder(pathIndex);
+  if (!h || isAnim(doc.path[pathIndex])) return;
+  checkpoint();
+  if (transitionSelect.value) h.transition = transitionSelect.value;
+  else delete h.transition;
+});
 
 // ---------- Notizen ----------
 // Notizen hängen am Objekt eines Kamera-Schritts bzw. am Animationsschritt selbst – so wandern sie beim
@@ -771,7 +804,8 @@ function goTo(i) {
   markActive();
   updateProgress();
   if (presenting) applyVisibility(pathIndex);
-  camera.flyTo(stepCamera(pathIndex));
+  // Übergang gilt beim Präsentieren; im Editor fliegt die Kamera immer.
+  moveCamera(stepCamera(pathIndex), presenting ? noteHolder(pathIndex)?.transition : null);
   // Ein Video, auf das der Pfad zoomt, startet; alle anderen halten an.
   for (const o of doc.objects) {
     if (o.type !== "video") continue;
@@ -2174,7 +2208,7 @@ async function exportPptx(morph) {
   const path = await tauri.dialog.save({ filters: [{ name: "PowerPoint-Präsentation", extensions: ["pptx"] }], defaultPath: `${base}.pptx` });
   if (!path) return;
   const target = path.toLowerCase().endsWith(".pptx") ? path : `${path}.pptx`;
-  const steps = doc.path.map((_, i) => ({ rect: stepRect(i), hidden: hiddenAt(i), notes: noteHolder(i)?.notes ?? "" })).filter((s) => s.rect);
+  const steps = doc.path.map((_, i) => ({ rect: stepRect(i), hidden: hiddenAt(i), notes: noteHolder(i)?.notes ?? "", transition: noteHolder(i)?.transition })).filter((s) => s.rect);
   try {
     document.body.classList.add("busy");
     const entries = await buildPptx({
