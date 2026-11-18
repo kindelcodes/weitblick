@@ -204,8 +204,9 @@ body:not(.insertbar-open) .insertbar {
 }
 
 .insertbar .tabs {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* Reiter brechen in eine zweite Zeile um, statt abgeschnitten zu werden. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   margin-bottom: 10px;
 }
@@ -415,7 +416,8 @@ body:not(.insertbar-open) .insertbar {
 }
 
 .insertbar .tabs button {
-  padding: 6px 2px;
+  flex: 1 1 auto;
+  padding: 6px 8px;
   font-size: 12px;
 }
 
@@ -448,9 +450,25 @@ body:not(.insertbar-open) .insertbar {
 }
 
 .tile-grid {
+  /* Kompakt: so viele Formen pro Zeile wie hineinpassen; der Name steht im Tooltip. */
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 2px;
+}
+
+.tile-grid .tile > span:not(.css-shape) {
+  display: none;
+}
+
+/* Gruppentitel bleiben beim Scrollen sichtbar. */
+.insertbar [data-panel="shapes"] h4 {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  margin: 10px -8px 4px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
 .insertbar .tile {
@@ -465,8 +483,8 @@ body:not(.insertbar-open) .insertbar {
 
 .insertbar .tile svg,
 .insertbar .tile .css-shape {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   color: var(--accent);
 }
 
