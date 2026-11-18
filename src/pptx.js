@@ -641,12 +641,40 @@ function readText(body, theme, defaults) {
   const algn = desc(body, "pPr")[0]?.getAttribute("algn");
   // „Text bei Überlauf verkleinern“: PowerPoint speichert den Faktor in normAutofit@fontScale.
   const scale = num(desc(body, "normAutofit")[0]?.getAttribute("fontScale"), 100000) / 100000;
+  const bold = rPr?.getAttribute("b") === "1" || (rPr?.getAttribute("b") == null && defaults.bold);
+  const italic = rPr?.getAttribute("i") === "1";
+  const color = colorOf(kid(rPr, "solidFill"), theme) ?? defaults.color;
+  // Läufe, die vom ersten abweichen (fett, kursiv, Farbe), werden Formatabschnitte (spans).
+  const spans = [];
+  let at = 0;
+  paras.forEach((p) => {
+    for (const r of [...p.children].filter((c) => c.localName === "r" || c.localName === "fld")) {
+      const t = kid(r, "t")?.textContent ?? "";
+      const pr = kid(r, "rPr");
+      const s = {};
+      const rb = pr?.getAttribute("b");
+      const ri = pr?.getAttribute("i");
+      const rc = colorOf(kid(pr, "solidFill"), theme);
+      if (rb != null && (rb === "1") !== bold) s.b = rb === "1";
+      if (ri != null && (ri === "1") !== italic) s.i = ri === "1";
+      if (rc && rc.toLowerCase() !== String(color).toLowerCase()) s.c = rc;
+      const e = Math.min(at + t.length, text.length);
+      const last = spans.at(-1);
+      if (t && e > at && Object.keys(s).length) {
+        if (last && last.e === at && last.b === s.b && last.i === s.i && last.c === s.c) last.e = e;
+        else spans.push({ s: at, e, ...s });
+      }
+      at += t.length;
+    }
+    at += 1; // Zeilenumbruch zwischen Absätzen
+  });
   return {
     text,
+    ...(spans.length ? { spans } : {}),
     pt: (rPr?.getAttribute("sz") ? num(rPr.getAttribute("sz")) / 100 : defaults.pt) * scale,
-    bold: rPr?.getAttribute("b") === "1" || (rPr?.getAttribute("b") == null && defaults.bold),
-    italic: rPr?.getAttribute("i") === "1",
-    color: colorOf(kid(rPr, "solidFill"), theme) ?? defaults.color,
+    bold,
+    italic,
+    color,
     font: kid(rPr, "latin")?.getAttribute("typeface")?.replace(/^\+mj-lt$/, defaults.major ?? "").replace(/^\+mn-lt$/, defaults.minor ?? "") || null,
     align: { ctr: "center", r: "right" }[algn] ?? "left",
   };
@@ -801,6 +829,7 @@ export function importPptx(entries, title, baseTheme) {
             id: id("t"),
             type: "text",
             text: t.text,
+            ...(t.spans ? { spans: t.spans } : {}),
             size: t.pt * EMU_PER_PT * k,
             color: t.color,
             align: t.align,
@@ -880,7 +909,7 @@ export function importPptx(entries, title, baseTheme) {
           const t = readText(kid(tc, "txBody"), theme, { pt: 14, bold: false, color: dark, major: theme.major, minor: theme.minor });
           if (t) {
             const pad = cw * 0.05;
-            objects.push(place({ ...cell, x: cell.x + pad, w: cell.w - 2 * pad }, { id: id("t"), type: "text", fit: true, text: t.text, size: t.pt * EMU_PER_PT * k, color: t.color, align: t.align, ...(t.bold ? { weight: 700 } : {}) }));
+            objects.push(place({ ...cell, x: cell.x + pad, w: cell.w - 2 * pad }, { id: id("t"), type: "text", fit: true, text: t.text, ...(t.spans ? { spans: t.spans } : {}), size: t.pt * EMU_PER_PT * k, color: t.color, align: t.align, ...(t.bold ? { weight: 700 } : {}) }));
           }
           tx += cw;
         });

@@ -3454,8 +3454,35 @@ async function startPresentation(fromCurrent) {
   });
 }
 
+// ---------- Präsentierhilfen: leerer Bildschirm und Laserpointer ----------
+let blankMode = null;
+let laserOn = false;
+const blankEl = Object.assign(document.createElement("div"), { className: "blank-screen", hidden: true });
+const laserDot = Object.assign(document.createElement("div"), { className: "laser-dot", hidden: true });
+document.body.append(blankEl, laserDot);
+
+function setBlank(mode) {
+  blankMode = mode;
+  blankEl.hidden = !mode;
+  blankEl.style.background = mode === "white" ? "#fff" : "#000";
+}
+
+function setLaser(on) {
+  laserOn = on;
+  laserDot.hidden = !on;
+  document.body.classList.toggle("laser", on);
+}
+
+document.addEventListener("pointermove", (e) => {
+  if (!laserOn) return;
+  laserDot.style.left = `${e.clientX}px`;
+  laserDot.style.top = `${e.clientY}px`;
+});
+
 async function stopPresentation() {
   if (!presenting) return;
+  setBlank(null);
+  setLaser(false);
   presenting = false;
   document.body.classList.remove("presenting", "show-controls");
   applyVisibility(pathIndex); // im Editor ist alles sichtbar
@@ -3472,6 +3499,7 @@ if (tauri?.event) {
     if (payload === "next") goTo(pathIndex + 1);
     else if (payload === "prev") goTo(pathIndex - 1);
     else if (payload === "stop") stopPresentation();
+    else if (payload === "black" || payload === "white") setBlank(blankMode ? null : payload);
   });
 }
 
@@ -3716,6 +3744,23 @@ document.addEventListener("keydown", (e) => {
     if (e.key.toLowerCase() === "y" || e.shiftKey) redo();
     else undo();
     return;
+  }
+  // Beim Präsentieren: B (oder .) schwarzer, W weißer Bildschirm – jede Taste kehrt zurück; L Laserpointer.
+  if (presenting && !e.ctrlKey && !e.altKey) {
+    if (blankMode) {
+      e.preventDefault();
+      return setBlank(null);
+    } else {
+      const k = e.key.toLowerCase();
+      if (k === "b" || k === "w" || k === ".") {
+        e.preventDefault();
+        return setBlank(k === "w" ? "white" : "black");
+      }
+      if (k === "l") {
+        e.preventDefault();
+        return setLaser(!laserOn);
+      }
+    }
   }
   // Pfeiltasten verschieben die Auswahl (1 px, mit Umschalt 10 px auf dem Bildschirm); ohne Auswahl blättern sie im Pfad.
   const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -4072,12 +4117,33 @@ async function thumbnail(step = null, W = 320, H = 180) {
         ctx.fillRect(-w / 2, -h / 2, w, h);
       }
     } else if (o.type === "text" && o.size * k >= 1.5) {
-      ctx.fillStyle = o.color || doc.theme.text;
-      ctx.font = `${textItalic(o) ? "italic " : ""}${textWeight(o)} ${o.size * k}px ${fontStack(textFont(o))}`;
-      ctx.textAlign = o.align === "center" ? "center" : o.align === "right" ? "right" : "left";
+      // Zeile für Zeile, formatierte Abschnitte (o.spans) mit eigener Fettung, Kursivschrift und Farbe.
+      const base = { b: textWeight(o) >= 600, i: textItalic(o), c: o.color || doc.theme.text };
+      const fontOf = (st) => `${st.i ? "italic " : ""}${st.b ? 700 : textWeight(o)} ${o.size * k}px ${fontStack(textFont(o))}`;
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      const x = ctx.textAlign === "center" ? 0 : ctx.textAlign === "right" ? w / 2 : -w / 2;
-      o.text.split("\n").forEach((line, i) => ctx.fillText(line, x, -h / 2 + i * o.size * k * 1.25, w));
+      let at = 0;
+      o.text.split("\n").forEach((line, li) => {
+        const cuts = new Set([0, line.length]);
+        for (const r of o.spans ?? []) for (const c of [r.s - at, r.e - at]) if (c > 0 && c < line.length) cuts.add(c);
+        const pts = [...cuts].sort((a, b) => a - b);
+        const segs = pts.slice(0, -1).map((p, n) => {
+          const r = o.spans?.find((r) => r.s <= at + p && r.e >= at + pts[n + 1]) ?? {};
+          const st = { b: r.b ?? base.b, i: r.i ?? base.i, c: r.c ?? base.c };
+          ctx.font = fontOf(st);
+          const t = line.slice(p, pts[n + 1]);
+          return { t, st, w: ctx.measureText(t).width };
+        });
+        const total = segs.reduce((s, g) => s + g.w, 0);
+        let x = o.align === "center" ? -total / 2 : o.align === "right" ? w / 2 - total : -w / 2;
+        for (const g of segs) {
+          ctx.font = fontOf(g.st);
+          ctx.fillStyle = g.st.c;
+          ctx.fillText(g.t, x, -h / 2 + li * o.size * k * 1.25);
+          x += g.w;
+        }
+        at += line.length + 1;
+      });
     }
     ctx.restore();
   }

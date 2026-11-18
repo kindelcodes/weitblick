@@ -1817,3 +1817,32 @@ body.painting .obj {
 .insertbar details.sec > summary:hover {
   color: var(--accent);
 }
+
+/* Präsentieren: schwarzer/weißer Bildschirm (B, W) und Laserpointer (L) */
+.blank-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+}
+
+.blank-screen[hidden],
+.laser-dot[hidden] {
+  display: none;
+}
+
+body.laser,
+body.laser * {
+  cursor: none !important;
+}
+
+.laser-dot {
+  position: fixed;
+  z-index: 2000;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #ff2a2a;
+  box-shadow: 0 0 10px 4px rgba(255, 40, 40, 0.6);
+  pointer-events: none;
+}

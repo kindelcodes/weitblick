@@ -60,7 +60,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Rückgängig / Wiederholen | Strg+Z / Strg+Y (oder Strg+Umschalt+Z) |
 | Bild einfügen | Knopf „Bild“ oder Bilddatei auf die Leinwand ziehen; Bilder behalten beim Vergrößern ihr Seitenverhältnis (Umschalt hebt das auf) |
 | PowerPoint exportieren | „Export ▾“ → mit Morph-Übergängen (jeder Pfadschritt eine Folie, die Kamerafahrt wird zu PowerPoints Morph; ab PowerPoint 2019/365) oder klassisch |
-| PowerPoint importieren | „Öffnen“ und eine .pptx wählen (oder „Export ▾“ → importieren): jede Folie wird ein Rahmen samt Pfadschritt; eine Folie lässt sich an ihrer freien Fläche greifen und samt Inhalt verschieben |
+| PowerPoint importieren | „Öffnen“ und eine .pptx wählen (oder „Export ▾“ → importieren): jede Folie wird ein Rahmen samt Pfadschritt; eine Folie lässt sich an ihrer freien Fläche greifen und samt Inhalt verschieben; fette, kursive und farbige Wörter bleiben erhalten |
 | Prezi importieren | In Prezi „Offline-Präsentation herunterladen“ (Portable Prezi, .zip), dann in Weitblick „Öffnen“ und die .zip wählen: Leinwand, Rahmen, Kapitel, Texte, Bilder (mit Zuschnitt), Formen, Linien, Grafiken (als SVG), Hintergrund, Schriften, Pfad und Einblendungen kommen an derselben Stelle an – aus Prezi Next wie aus Prezi Classic. Das Prezi-Programm im Archiv wird nicht gestartet; Videos bleiben vorerst Platzhalter |
 | Startseite | Beim Start und über „Start“: die zuletzt geöffneten Präsentationen mit Vorschaubild, dazu Neu, Öffnen und Beispiel |
 | Autospeichern | Ungespeicherte Änderungen landen jede Minute in einer Wiederherstellungsdatei (nicht in deiner Datei); nach einem Absturz bietet der nächste Start die Wiederherstellung an |
@@ -82,7 +82,9 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Beim Präsentieren: Objekt heranzoomen | Klick darauf, „zurück“ kehrt in den Pfad zurück |
 | Übergang pro Schritt | Auswahl „Übergang zu diesem Schritt“ unter der Pfadliste: Fliegen (Standard), Überblenden oder Direkt; gilt beim Präsentieren und im PowerPoint-Export |
 | Notizen | Feld „Notizen“ unter der Pfadliste: gilt für den aktuellen Pfadschritt und wandert beim Umsortieren mit; kommen beim PowerPoint-Export als Sprechernotizen mit und beim Import zurück |
-| Referentenansicht | Läuft die Präsentation auf dem anderen Bildschirm, öffnet sich auf deinem ein Fenster mit Notizen, Vorschau des aktuellen und nächsten Schritts, nächstem Schritt, Uhr und Laufzeit (Klick setzt zurück); Pfeiltasten, Weiter/Zurück und Esc steuern von dort |
+| Referentenansicht | Läuft die Präsentation auf dem anderen Bildschirm, öffnet sich auf deinem ein Fenster mit Notizen, Vorschau des aktuellen und nächsten Schritts, nächstem Schritt, Uhr und Laufzeit (Klick setzt zurück); Pfeiltasten, Weiter/Zurück und Esc steuern von dort; Feld „Soll … min“: die Laufzeit wird zwei Minuten vor Ende gelb, danach rot |
+| Schwarzer / weißer Bildschirm | beim Präsentieren B (oder .) bzw. W; jede Taste kehrt zurück |
+| Laserpointer | beim Präsentieren L: der Mauszeiger wird zum roten Punkt, nochmal L oder Esc beendet |
 | Präsentation beenden | Esc |
 
 ## Dateiformat `.weitblick`
