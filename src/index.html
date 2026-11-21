@@ -60,6 +60,7 @@
 
     <main id="viewport" class="viewport">
       <div id="bg-layer" class="bg-layer"></div>
+      <div id="motion-layer" class="motion-layer" aria-hidden="true"></div>
       <div id="world" class="world"></div>
       <div id="formatbar" class="formatbar" role="toolbar" aria-label="Bearbeiten">
         <div class="fb-group" data-group="text">
@@ -155,6 +156,12 @@
           </select>
         </label>
         <label class="theme-font">Parallaxe <input type="checkbox" id="chk-parallax" /></label>
+        <label class="theme-font">Bewegter Hintergrund
+          <select id="sel-motion" title="Läuft nur, solange die Kamera stillsteht">
+            <option value="">Aus</option>
+          </select>
+        </label>
+        <label class="theme-font">Stärke <input type="range" id="inp-motion" min="0" max="1" step="0.05" title="dezent ↔ deutlich" /></label>
         <label class="theme-font">Seitenverhältnis
           <select id="sel-aspect">
             <option value="16:9">16:9</option>

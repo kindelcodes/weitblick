@@ -82,6 +82,7 @@ ein Tag `v…` legt zusätzlich einen Release-Entwurf an.
 | Neue Präsentation | „Neu“ oder Strg+N |
 | Stil, Formen, Symbole, Diagramme, Schriften | „◫ Einfügen“ öffnet die Seitenleiste rechts: 8 Stile und eigene Stilkits, Hintergrund (Farbe, Bild, Parallaxe, Seitenverhältnis), 38 Formen in 6 Gruppen (inkl. Weltkarte), über 2.000 Symbole, 15 Inhaltsblöcke, Google-Schriften |
 | Eigenes Stilkit | Stil-Reiter: Farben, Schriften und fett/kursiv je Rolle einstellen, Namen eingeben, „Speichern“; steht danach in jeder Präsentation bereit |
+| Bewegter Hintergrund | Stil-Reiter → „Hintergrund & Format“: Farbverlauf, Lichtpunkte, Sternenhimmel oder Schnee in den Farben des Stils, mit Regler für die Stärke. Läuft nur, solange die Kamera stillsteht; bei „Animationen reduzieren“ (Windows) ruht er. PDF und PowerPoint zeigen ihn nicht |
 | Bild als Hintergrund | Bild auswählen, „▤ Als Hintergrund“ in der Formatleiste |
 | Vorschau eines Pfadschritts | Maus über den Eintrag in der Pfadliste halten |
 | Schriftart | Formatleiste: Standard-, eingebettete und alle Systemschriften |

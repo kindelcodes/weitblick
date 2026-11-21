@@ -6,6 +6,7 @@ import { THEMES, ROLES } from "./themes.js";
 import { buildPptx, importPptx } from "./pptx.js";
 import { importPrezi } from "./prezi.js";
 import { TEMPLATES } from "./templates.js";
+import { MOTIONS } from "./motion.js";
 import { ICON_NODES, ICON_TAGS } from "./vendor/lucide.js";
 
 const ZOOM_STEP = 1.25;
@@ -367,6 +368,7 @@ function render() {
   const moving = !!camera.anim || settling;
   if (!moving) world.style.setProperty("--inv", 1 / z);
   world.classList.toggle("flying", moving);
+  motionLayer.classList.toggle("paused", moving);
   // Punktraster wandert mit, damit sich Bewegung auch auf leerer Fläche zeigt.
   const grid = 40 * z;
   const size = grid < 12 ? grid * Math.ceil(12 / grid) : grid;
@@ -439,6 +441,24 @@ function applyBackground() {
   bgLayer.className = `bg-layer fit-${bg.fit ?? "cover"}${bg.parallax ? " parallax" : ""}`;
   viewport.classList.toggle("has-bg-image", !!(m || g));
   updateParallax();
+  applyMotion();
+}
+
+// Bewegter Hintergrund: doc.background.motion = { kind, strength }. Liegt bildschirmfest zwischen Hintergrund
+// und Leinwand; während Kamerabewegungen ruht er (render setzt .paused).
+const motionLayer = document.getElementById("motion-layer");
+let motionKey = "";
+function applyMotion() {
+  const mo = doc.background?.motion;
+  const fx = mo && MOTIONS.find((x) => x.id === mo.kind);
+  // Die Effekte erwarten #rrggbb; importierte Stile können auch rgb() oder #rgb enthalten.
+  const hex = (c) => toHex(String(c ?? "").startsWith("rgb") ? rgbHex(c) : c);
+  const t = { background: hex(doc.theme.background), text: hex(doc.theme.text), accent: hex(doc.theme.accent), accent2: hex(doc.theme.accent2) };
+  const key = fx ? JSON.stringify([fx.id, mo.strength, t]) : "";
+  if (key === motionKey) return; // buildWorld läuft oft; nur bei einer Änderung neu aufbauen (sonst springen die Animationen)
+  motionKey = key;
+  motionLayer.replaceChildren();
+  if (fx) fx.build(motionLayer, t, mo.strength ?? 0.5);
 }
 
 // Parallaxe: Das Bild wandert langsamer als die Leinwand mit und zoomt nur leicht, bezogen auf den Überblick.
@@ -3148,6 +3168,9 @@ function updateStylePanel() {
   document.getElementById("btn-bg-remove").disabled = !m;
   document.getElementById("sel-bg-fit").value = bg.fit ?? "cover";
   document.getElementById("chk-parallax").checked = !!bg.parallax;
+  document.getElementById("sel-motion").value = bg.motion?.kind ?? "";
+  document.getElementById("inp-motion").value = bg.motion?.strength ?? 0.5;
+  document.getElementById("inp-motion").disabled = !bg.motion;
   document.getElementById("sel-aspect").value = doc.aspect ?? "16:9";
   sidebar.querySelectorAll(".theme-card").forEach((c) => c.classList.toggle("on", c.dataset.theme === t.id));
   for (const k of THEME_COLORS) {
@@ -3193,6 +3216,12 @@ function buildStylePanel() {
   fitSel.addEventListener("change", () => setBackground({ fit: fitSel.value }));
   const parallax = document.getElementById("chk-parallax");
   parallax.addEventListener("change", () => setBackground({ parallax: parallax.checked }));
+  const motionSel = document.getElementById("sel-motion");
+  const motionStrength = document.getElementById("inp-motion");
+  for (const fx of MOTIONS) motionSel.append(new Option(fx.label, fx.id));
+  const setMotion = () => setBackground({ motion: motionSel.value ? { kind: motionSel.value, strength: Number(motionStrength.value) } : null });
+  motionSel.addEventListener("change", setMotion);
+  motionStrength.addEventListener("change", setMotion);
   const aspect = document.getElementById("sel-aspect");
   aspect.addEventListener("change", () => {
     checkpoint();

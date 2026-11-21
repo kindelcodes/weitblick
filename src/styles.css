@@ -2120,3 +2120,21 @@ body.presenting .tour {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Bewegter Hintergrund (motion/*.js): bildschirmfest zwischen Hintergrund und Leinwand. */
+.motion-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.motion-layer.paused * {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-layer * {
+    animation: none !important;
+  }
+}
