@@ -53,6 +53,7 @@ function checkpoint(before = snapshot()) {
   if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
   redoStack = [];
   showFileName();
+  staleMinimap();
 }
 
 function restore(snap) {
@@ -116,16 +117,24 @@ function extOf(name) {
   return name.split(".").pop().toLowerCase();
 }
 
+// Ein Medium liegt nur als Blob im Speicher; Base64 entsteht erst beim Speichern oder Exportieren.
+// Eine eigene verkleinerte Anzeigefassung großer Fotos lohnt nicht: Edge entpackt JPEGs ohnehin passend
+// verkleinert, eine Kopie kostete in der Messung mehr Speicher und Rechenzeit, als sie sparte.
 function addMedia(name, data) {
   const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: MIME[extOf(name)] ?? "application/octet-stream" }));
-  media.set(name, { data, url });
+  const blob = new Blob([bytes], { type: MIME[extOf(name)] ?? "application/octet-stream" });
+  const old = media.get(name);
+  if (old) URL.revokeObjectURL(old.url);
+  media.set(name, { blob, url: URL.createObjectURL(blob) });
 }
 
 function clearMedia() {
   for (const m of media.values()) URL.revokeObjectURL(m.url);
   media.clear();
+  writtenMedia.clear();
 }
+
+const mediaData = (name) => blobToBase64(media.get(name).blob);
 
 function imageSize(url) {
   return new Promise((resolve) => {
@@ -319,7 +328,7 @@ function buildWorld() {
   document.body.style.setProperty("--bg", doc.theme.background);
   applyBackground();
   updatePathBadges();
-  queueMinimap();
+  staleMinimap();
 }
 
 function zoom() {
@@ -332,6 +341,20 @@ function unrotate(dx, dy) {
   return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
 }
 
+// Mausrad, Ziehen und Minikarte gelten wie eine Kamerafahrt als Bewegung: --inv und die Formatleiste ruhen
+// (beides zwingt den Browser, alle Objekte neu zu berechnen); erst wenn die Ansicht 150 ms ruht, wird nachgezogen.
+// will-change: transform wäre noch flüssiger, kostete in der echten App aber über 1 GB Grafikspeicher.
+let settling = false;
+let settleTimer = 0;
+function cameraBusy() {
+  settling = true;
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settling = false;
+    render();
+  }, 150);
+}
+
 function render() {
   const z = zoom();
   const tx = viewport.clientWidth / 2 - camera.cx * z;
@@ -339,7 +362,11 @@ function render() {
   world.style.transform = camera.rot
     ? `translate(${viewport.clientWidth / 2}px, ${viewport.clientHeight / 2}px) rotate(${-camera.rot}deg) scale(${z}) translate(${-camera.cx}px, ${-camera.cy}px)`
     : `translate(${tx}px, ${ty}px) scale(${z})`;
-  world.style.setProperty("--inv", 1 / z); // für Auswahlrand und Anfasser in Bildschirmgröße
+  // Für Auswahlrand und Anfasser in Bildschirmgröße. Während einer Kamerafahrt nicht: jede Änderung lässt den
+  // Browser alle Objekte neu berechnen und zeichnen; das macht die Fahrt auf langsamen Rechnern ruckelig.
+  const moving = !!camera.anim || settling;
+  if (!moving) world.style.setProperty("--inv", 1 / z);
+  world.classList.toggle("flying", moving);
   // Punktraster wandert mit, damit sich Bewegung auch auf leerer Fläche zeigt.
   const grid = 40 * z;
   const size = grid < 12 ? grid * Math.ceil(12 / grid) : grid;
@@ -357,7 +384,11 @@ function render() {
 // Verschieben und Zoomen. Ist die Auswahl ganz außer Sicht, bleibt sie am Rand stehen.
 
 function positionContextBar() {
-  if (!formatbar.classList.contains("visible") || !selection.length) return;
+  // Während Verschieben, Größe ändern oder Kamerabewegung ausblenden statt vermessen: getBoundingClientRect
+  // zwingt den Browser dabei jedes Mal, alle Objekte neu zu berechnen (die größte Last auf langsamen Rechnern).
+  const busy = !!(gesture?.live || (gesture && gesture.kind !== "pan" && gesture.kind !== "move") || camera.anim || settling);
+  formatbar.classList.toggle("in-motion", busy);
+  if (busy || !formatbar.classList.contains("visible") || !selection.length) return;
   const vr = viewport.getBoundingClientRect();
   let top = Infinity;
   let bottom = -Infinity;
@@ -2061,6 +2092,7 @@ viewport.addEventListener("pointermove", (e) => {
   if (gesture.kind === "pan") {
     const z = zoom();
     const d = unrotate((e.clientX - gesture.x) / z, (e.clientY - gesture.y) / z);
+    cameraBusy();
     camera.set({ w: camera.w, cx: gesture.cx - d.x, cy: gesture.cy - d.y });
     return;
   }
@@ -2276,6 +2308,8 @@ const endGesture = (e) => {
   const g = gesture;
   gesture = null;
   viewport.classList.remove("dragging");
+  positionContextBar();
+  if (g?.live || g?.kind?.includes("resize") || g?.kind === "rotate") staleMinimap();
   clearGuides();
   const moved = g?.before && snapshot() !== g.before;
   if (moved) checkpoint(g.before);
@@ -2325,6 +2359,7 @@ function zoomAt(factor, sx, sy) {
   const w = Math.min(MAX_W, Math.max(MIN_W, camera.w / factor));
   const z = viewport.clientWidth / w;
   const d = unrotate((sx - viewport.clientWidth / 2) / z, (sy - viewport.clientHeight / 2) / z);
+  cameraBusy();
   camera.set({ w, cx: before.x - d.x, cy: before.y - d.y });
 }
 
@@ -2362,11 +2397,30 @@ function showFileName() {
 }
 
 // Nur Bilder mitspeichern, die noch auf der Leinwand liegen.
-function usedMedia() {
+function usedMediaNames() {
   const names = new Set(doc.objects.filter((o) => o.type === "image" || o.type === "video").flatMap((o) => [o.src, o.source?.file]));
   if (doc.background?.src) names.add(doc.background.src);
   for (const f of doc.fonts ?? []) for (const face of f.faces) names.add(face.src);
-  return [...names].filter((n) => media.has(n)).map((name) => ({ name, data: media.get(name).data }));
+  return [...names].filter((n) => media.has(n));
+}
+
+// Welche Medien in welcher Datei schon stecken: Pfad → Map(Name → Medieneintrag). Unveränderte kopiert
+// Rust roh aus dieser Datei, statt sie als Base64 durch die Oberfläche zu schicken (Autospeichern, Strg+S).
+const writtenMedia = new Map();
+
+async function writePresentation(path, json, from = path) {
+  const names = usedMediaNames();
+  const had = writtenMedia.get(from);
+  const keep = had ? names.filter((n) => had.get(n) === media.get(n)) : [];
+  const payload = (list) => Promise.all(list.map(async (name) => ({ name, data: await mediaData(name) })));
+  try {
+    await tauri.core.invoke("save_presentation", { path, json, media: await payload(names.filter((n) => !keep.includes(n))), keepFrom: keep.length ? from : null, keep });
+  } catch (err) {
+    if (!keep.length) throw err;
+    // Die alte Datei wurde außerhalb verändert oder fehlt: alles neu schreiben.
+    await tauri.core.invoke("save_presentation", { path, json, media: await payload(names) });
+  }
+  writtenMedia.set(path, new Map(names.map((n) => [n, media.get(n)])));
 }
 
 async function confirmDiscard() {
@@ -2397,21 +2451,19 @@ function showToast(text) {
 async function saveAs() {
   const path = await tauri.dialog.save({ filters: FILTERS, defaultPath: `${doc.title}.weitblick` });
   if (!path) return;
+  const old = currentPath;
   currentPath = path.endsWith(".weitblick") ? path : `${path}.weitblick`;
   // Eine neue Präsentation heißt danach wie ihre Datei.
   if (doc.title === "Neue Präsentation") doc.title = currentPath.split(/[\\/]/).pop().replace(/\.weitblick$/i, "");
-  await save();
+  await save(old);
 }
 
-async function save() {
+// from: Datei, aus der unveränderte Medien übernommen werden können (bei „Speichern unter“ die bisherige).
+async function save(from = currentPath) {
   if (!currentPath) return saveAs();
   if (isEditing()) document.activeElement.blur();
   try {
-    await tauri.core.invoke("save_presentation", {
-      path: currentPath,
-      json: JSON.stringify({ ...doc, version: FORMAT_VERSION }, null, 2),
-      media: usedMedia(),
-    });
+    await writePresentation(currentPath, JSON.stringify({ ...doc, version: FORMAT_VERSION }, null, 2), from ?? currentPath);
     markSaved();
     clearRecovery();
     rememberRecent(currentPath);
@@ -2458,6 +2510,7 @@ async function exportPptx(morph) {
     const entries = await buildPptx({
       doc,
       media,
+      mediaData,
       steps,
       morph,
       aspect: aspectRatio(),
@@ -2635,6 +2688,7 @@ async function openPath(path) {
     if (loaded.format !== "weitblick") throw new Error("Das ist keine Weitblick-Präsentation.");
     if (loaded.version > FORMAT_VERSION) throw new Error("Die Datei stammt aus einer neueren Weitblick-Version.");
     loadDocument(loaded, path, result.media);
+    writtenMedia.set(path, new Map(media)); // diese Medien stecken unverändert in der Datei
     rememberRecent(path);
   } catch (err) {
     await tauri.dialog.message(String(err.message ?? err), { title: "Öffnen fehlgeschlagen", kind: "error" });
@@ -3858,7 +3912,7 @@ on("btn-text-smaller", () => changeTextSize(1 / 1.15));
 on("btn-text-bigger", () => changeTextSize(1.15));
 on("btn-delete", deleteSelected);
 on("btn-open", openFile);
-on("btn-save", save);
+on("btn-save", () => save());
 on("btn-add-image", chooseImages);
 on("btn-add-to-path", addSelectedToPath);
 on("btn-fade-in", () => addAnimation("fade-in"));
@@ -3984,7 +4038,7 @@ async function autosave() {
   const snap = snapshot();
   if (!isDirty() || snap === autosaved) return;
   recoveryPath ??= await tauri.core.invoke("recovery_path");
-  await tauri.core.invoke("save_presentation", { path: recoveryPath, json: JSON.stringify({ ...doc, version: FORMAT_VERSION }), media: usedMedia() });
+  await writePresentation(recoveryPath, JSON.stringify({ ...doc, version: FORMAT_VERSION }));
   await tauri.core.invoke("save_recovery", { json: JSON.stringify({ path: currentPath, title: doc.title, time: Date.now() }) });
   autosaved = snap;
 }
@@ -4068,7 +4122,7 @@ async function editSource(o) {
     if (!exists) {
       const m = media.get(o.source.file);
       if (!m) throw new Error("Die Originaldatei ist weder am verknüpften Ort noch eingebettet.");
-      o.source.path = await tauri.core.invoke("write_temp", { name: o.source.file.split("/").pop().replace(/^source-[^-]+-/, ""), data: m.data });
+      o.source.path = await tauri.core.invoke("write_temp", { name: o.source.file.split("/").pop().replace(/^source-[^-]+-/, ""), data: await mediaData(o.source.file) });
       [o.source.mtime] = await tauri.core.invoke("file_mtimes", { paths: [o.source.path] });
     }
     await tauri.core.invoke("open_file", { path: o.source.path });
@@ -4349,7 +4403,7 @@ async function saveAsTemplate() {
   try {
     const dir = await tauri.core.invoke("template_dir");
     const name = (doc.title || "Vorlage").replace(/[\\/:*?"<>|]/g, "_").trim() || "Vorlage";
-    await tauri.core.invoke("save_presentation", { path: `${dir}/${name}.weitblick`, json: JSON.stringify({ ...doc, version: FORMAT_VERSION }), media: usedMedia() });
+    await writePresentation(`${dir}/${name}.weitblick`, JSON.stringify({ ...doc, version: FORMAT_VERSION }), currentPath);
     await tauri.dialog.message(`„${name}“ steht jetzt unter „Start“ bei den Vorlagen.`, { title: "Als Vorlage gespeichert", kind: "info" });
   } catch (err) {
     await tauri.dialog.message(String(err?.message ?? err), { title: "Vorlage speichern fehlgeschlagen", kind: "error" });
@@ -4552,7 +4606,7 @@ function commands() {
   return [
     { label: "Neue Präsentation", keys: "Strg+N", run: newDocument },
     { label: "Öffnen …", keys: "Strg+O", run: openFile },
-    { label: "Speichern", keys: "Strg+S", run: save },
+    { label: "Speichern", keys: "Strg+S", run: () => save() },
     { label: "Speichern unter …", keys: "Strg+Umschalt+S", run: saveAs },
     { label: "Startseite und Vorlagen", run: showStart },
     { label: "Als Vorlage speichern", run: saveAsTemplate },
@@ -4716,9 +4770,30 @@ function queueMinimap() {
 }
 
 // shortcut: Kameradrehung wird in der Minikarte nicht gezeigt, nur der Ausschnitt; bei Bedarf als gedrehtes Rechteck zeichnen.
+// Die Objekte liegen gezeichnet in minimapCache; bei einer Kamerabewegung kommt nur das Rechteck neu dazu.
+const minimapCache = Object.assign(document.createElement("canvas"), { width: minimap.width, height: minimap.height });
+let minimapStale = true;
+function staleMinimap() {
+  minimapStale = true;
+  queueMinimap();
+}
+
 function drawMinimap() {
   if (!minimapOn || presenting) return;
+  if (minimapStale) drawMinimapObjects();
+  if (!minimapBox) return;
   const ctx = minimap.getContext("2d");
+  const { k, ox, oy } = minimapBox;
+  ctx.drawImage(minimapCache, 0, 0);
+  const ch = (camera.w * viewport.clientHeight) / viewport.clientWidth;
+  ctx.strokeStyle = "#f28c38";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ox + (camera.cx - camera.w / 2) * k, oy + (camera.cy - ch / 2) * k, camera.w * k, ch * k);
+}
+
+function drawMinimapObjects() {
+  minimapStale = false;
+  const ctx = minimapCache.getContext("2d");
   const W = minimap.width;
   const H = minimap.height;
   const shown = doc.objects.filter((o) => !o.hidden);
@@ -4748,10 +4823,6 @@ function drawMinimap() {
       ctx.globalAlpha = 1;
     }
   }
-  const ch = (camera.w * viewport.clientHeight) / viewport.clientWidth;
-  ctx.strokeStyle = "#f28c38";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(ox + (camera.cx - camera.w / 2) * k, oy + (camera.cy - ch / 2) * k, camera.w * k, ch * k);
 }
 
 function minimapJump(e) {
@@ -4759,6 +4830,7 @@ function minimapJump(e) {
   const r = minimap.getBoundingClientRect();
   const { k, ox, oy } = minimapBox;
   camera.stop();
+  cameraBusy();
   camera.set({ w: camera.w, cx: ((e.clientX - r.left) * (minimap.width / r.width) - ox) / k, cy: ((e.clientY - r.top) * (minimap.height / r.height) - oy) / k });
 }
 minimap.addEventListener("pointerdown", (e) => {

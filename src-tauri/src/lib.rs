@@ -27,12 +27,24 @@ fn is_safe_media_name(name: &str) -> bool {
     name.starts_with(MEDIA_DIR) && !name.contains("..") && !name.contains('\\') && name.len() > MEDIA_DIR.len()
 }
 
+// keep: Mediennamen, die unverändert aus der vorhandenen Datei keep_from übernommen werden (roh kopiert),
+// statt sie als Base64 durch die Oberfläche zu schicken. Fehlt dort einer, schlägt das Speichern fehl und
+// die Oberfläche schickt alles neu.
 #[tauri::command]
-fn save_presentation(path: String, json: String, media: Vec<MediaFile>) -> Result<(), String> {
+fn save_presentation(path: String, json: String, media: Vec<MediaFile>, keep_from: Option<String>, keep: Option<Vec<String>>) -> Result<(), String> {
     // Erst in eine Nachbardatei schreiben und dann umbenennen,
     // damit ein Absturz nie eine halb geschriebene Präsentation hinterlässt.
     let tmp = format!("{path}.tmp");
-    let file = File::create(&tmp).map_err(|e| format!("Datei kann nicht angelegt werden: {e}"))?;
+    let written = write_presentation(&tmp, &json, media, keep_from.as_deref(), keep.unwrap_or_default());
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    std::fs::rename(&tmp, &path).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+}
+
+fn write_presentation(tmp: &str, json: &str, media: Vec<MediaFile>, keep_from: Option<&str>, keep: Vec<String>) -> Result<(), String> {
+    let file = File::create(tmp).map_err(|e| format!("Datei kann nicht angelegt werden: {e}"))?;
     let mut zip = zip::ZipWriter::new(file);
     let deflated = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     // Bilder sind schon komprimiert, nochmal packen kostet nur Zeit.
@@ -48,8 +60,19 @@ fn save_presentation(path: String, json: String, media: Vec<MediaFile>) -> Resul
         zip.start_file(m.name, stored).map_err(|e| e.to_string())?;
         zip.write_all(&bytes).map_err(|e| e.to_string())?;
     }
+    if let (Some(src), false) = (keep_from, keep.is_empty()) {
+        // Eigener Block: die alte Datei muss vor dem Umbenennen wieder geschlossen sein (Windows sperrt sie sonst).
+        let mut old = zip::ZipArchive::new(File::open(src).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        for name in keep {
+            if !is_safe_media_name(&name) {
+                return Err(format!("Ungültiger Medienname: {name}"));
+            }
+            let entry = old.by_name(&name).map_err(|_| format!("{name} fehlt in der vorhandenen Datei"))?;
+            zip.raw_copy_file(entry).map_err(|e| e.to_string())?;
+        }
+    }
     zip.finish().map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+    Ok(())
 }
 
 #[tauri::command]
@@ -617,4 +640,31 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Speichern mit keep: unveränderte Medien kommen roh aus der alten Datei, auch wenn es dieselbe Datei ist.
+    #[test]
+    fn save_keeps_media_from_existing_file() {
+        let dir = std::env::temp_dir().join(format!("weitblick-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.weitblick").to_string_lossy().into_owned();
+        let img = MediaFile { name: "media/a.png".into(), data: STANDARD.encode(b"PNGDATA") };
+        save_presentation(path.clone(), "{}".into(), vec![img], None, None).unwrap();
+        let new = MediaFile { name: "media/b.png".into(), data: STANDARD.encode(b"NEW") };
+        save_presentation(path.clone(), "{\"v\":2}".into(), vec![new], Some(path.clone()), Some(vec!["media/a.png".into()])).unwrap();
+        let loaded = open_presentation(path.clone()).unwrap();
+        assert_eq!(loaded.json, "{\"v\":2}");
+        let mut names: Vec<_> = loaded.media.iter().map(|m| (m.name.clone(), STANDARD.decode(&m.data).unwrap())).collect();
+        names.sort();
+        assert_eq!(names, vec![("media/a.png".into(), b"PNGDATA".to_vec()), ("media/b.png".into(), b"NEW".to_vec())]);
+        // Fehlt ein übernommenes Medium, bleibt die Datei unverändert und es gibt keinen Rest.
+        assert!(save_presentation(path.clone(), "{}".into(), vec![], Some(path.clone()), Some(vec!["media/x.png".into()])).is_err());
+        assert_eq!(open_presentation(path.clone()).unwrap().json, "{\"v\":2}");
+        assert!(!std::path::Path::new(&format!("{path}.tmp")).exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

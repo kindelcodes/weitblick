@@ -101,11 +101,12 @@ export class Camera {
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration);
       const e = easeInOut(t);
-      this.set(t < 1 ? { ...path.at(e * path.S), rot: rot0 + turn * e } : { ...target, rot: rot0 + turn });
       if (t < 1) {
         this.anim = requestAnimationFrame(step);
+        this.set({ ...path.at(e * path.S), rot: rot0 + turn * e });
       } else {
-        this.anim = null;
+        this.anim = null; // vor dem letzten set: das Ziel wird wie ein ruhendes Bild dargestellt
+        this.set({ ...target, rot: rot0 + turn });
         if (done) done();
       }
     };

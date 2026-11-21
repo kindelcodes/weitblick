@@ -2108,3 +2108,15 @@ body.presenting .tour {
   font-size: 14px;
   white-space: nowrap;
 }
+
+/* Während einer Kamerafahrt behalten diese Hilfen ihre alte Größe (--inv ruht); also kurz ausblenden. */
+.world.flying .path-badge,
+.world.flying .handle,
+.world.flying .rot-handle {
+  visibility: hidden;
+}
+
+.formatbar.in-motion {
+  opacity: 0;
+  pointer-events: none;
+}

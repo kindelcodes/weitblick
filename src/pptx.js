@@ -220,7 +220,7 @@ function geomFor(o, ctx) {
   return `<a:prstGeom prst="${prst === "roundRect" ? "rect" : prst}"><a:avLst/></a:prstGeom>`;
 }
 
-// ctx: { doc, media, steps: [{ rect, hidden:Set }], morph, aspect, textFont, textWeight, textItalic,
+// ctx: { doc, media, mediaData (Name → Base64 des Originals), steps: [{ rect, hidden:Set }], morph, aspect, textFont, textWeight, textItalic,
 //        cornerRadius, hasCorners, shapeSvg, iconSvg, onProgress }
 export async function buildPptx(ctx) {
   const { doc, media, steps, morph, aspect } = ctx;
@@ -244,7 +244,7 @@ export async function buildPptx(ctx) {
     return mediaFor(`img:${src}`, async () => {
       const m = media.get(src);
       const ext = src.split(".").pop().toLowerCase();
-      if (["png", "jpg", "jpeg", "gif"].includes(ext)) return { data: m.data, ext: ext === "jpg" ? "jpeg" : ext };
+      if (["png", "jpg", "jpeg", "gif"].includes(ext)) return { data: await ctx.mediaData(src), ext: ext === "jpg" ? "jpeg" : ext };
       return { data: await reencode(m.url), ext: "png" };
     });
   }
